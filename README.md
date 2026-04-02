@@ -33,6 +33,7 @@ cipi-cli configure
 ```
 
 You will be prompted for:
+
 - **API endpoint** — the URL of your Cipi API (e.g. `https://api.example.com`)
 - **Token** — a Sanctum token created with `cipi api token create` on your server
 
@@ -125,10 +126,10 @@ cipi-cli --help                             Help
 
 ## Global flags
 
-| Flag | Description |
-|------|-------------|
-| `--json` | Output in JSON format (for scripting) |
-| `--no-color` | Disable colored output |
+| Flag         | Description                           |
+| ------------ | ------------------------------------- |
+| `--json`     | Output in JSON format (for scripting) |
+| `--no-color` | Disable colored output                |
 
 ## Async operations
 

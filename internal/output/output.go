@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 )
@@ -56,38 +56,67 @@ func Header(title string) {
 }
 
 type Table struct {
-	w       *tabwriter.Writer
 	headers []string
+	rows    [][]string
 }
 
 func NewTable(headers ...string) *Table {
-	w := tabwriter.NewWriter(os.Stdout, 2, 4, 3, ' ', 0)
-	t := &Table{w: w, headers: headers}
-	t.printHeader()
-	return t
-}
-
-func (t *Table) printHeader() {
-	colored := make([]string, len(t.headers))
-	for i, h := range t.headers {
-		colored[i] = Dim.Sprint(h)
-	}
-	fmt.Fprintf(t.w, "  %s\n", strings.Join(colored, "\t"))
-
-	seps := make([]string, len(t.headers))
-	for i, h := range t.headers {
-		seps[i] = Dim.Sprint(strings.Repeat("─", len(h)))
-	}
-	fmt.Fprintf(t.w, "  %s\n", strings.Join(seps, "\t"))
+	return &Table{headers: headers}
 }
 
 func (t *Table) Row(values ...string) {
-	fmt.Fprintf(t.w, "  %s\n", strings.Join(values, "\t"))
+	t.rows = append(t.rows, values)
 }
 
 func (t *Table) Flush() {
-	t.w.Flush()
+	colWidths := make([]int, len(t.headers))
+	for i, h := range t.headers {
+		colWidths[i] = utf8.RuneCountInString(h)
+	}
+	for _, row := range t.rows {
+		for i, v := range row {
+			if i < len(colWidths) {
+				if w := utf8.RuneCountInString(v); w > colWidths[i] {
+					colWidths[i] = w
+				}
+			}
+		}
+	}
+
+	gap := "   "
+
+	hdr := make([]string, len(t.headers))
+	for i, h := range t.headers {
+		hdr[i] = Dim.Sprint(padRight(h, colWidths[i]))
+	}
+	fmt.Printf("  %s\n", strings.Join(hdr, gap))
+
+	sep := make([]string, len(t.headers))
+	for i, h := range t.headers {
+		sep[i] = Dim.Sprint(padRight(strings.Repeat("─", utf8.RuneCountInString(h)), colWidths[i]))
+	}
+	fmt.Printf("  %s\n", strings.Join(sep, gap))
+
+	for _, row := range t.rows {
+		cells := make([]string, len(t.headers))
+		for i := 0; i < len(t.headers); i++ {
+			v := ""
+			if i < len(row) {
+				v = row[i]
+			}
+			cells[i] = padRight(v, colWidths[i])
+		}
+		fmt.Printf("  %s\n", strings.Join(cells, gap))
+	}
 	fmt.Println()
+}
+
+func padRight(s string, width int) string {
+	n := utf8.RuneCountInString(s)
+	if n >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-n)
 }
 
 func KeyValue(w io.Writer, key, value string) {

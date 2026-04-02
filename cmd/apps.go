@@ -44,10 +44,10 @@ var appsListCmd = &cobra.Command{
 		}
 
 		output.Header("Applications")
-		t := output.NewTable("NAME", "DOMAIN", "PHP", "REPOSITORY", "BRANCH")
+		t := output.NewTable("APP", "DOMAIN", "PHP", "REPOSITORY", "BRANCH")
 		for _, app := range result.Data {
 			t.Row(
-				str(app, "name"),
+				str(app, "app"),
 				str(app, "domain"),
 				str(app, "php"),
 				truncate(str(app, "repository"), 40),
@@ -86,8 +86,8 @@ var appsShowCmd = &cobra.Command{
 		}
 
 		app := result.Data
-		output.Header(fmt.Sprintf("App: %s", str(app, "name")))
-		output.KeyValue(nil, "Name", str(app, "name"))
+		output.Header(fmt.Sprintf("App: %s", str(app, "app")))
+		output.KeyValue(nil, "App", str(app, "app"))
 		output.KeyValue(nil, "Domain", str(app, "domain"))
 		output.KeyValue(nil, "PHP", str(app, "php"))
 		output.KeyValue(nil, "Repository", str(app, "repository"))
@@ -120,7 +120,7 @@ var appsCreateCmd = &cobra.Command{
 			return err
 		}
 
-		name, _ := cmd.Flags().GetString("name")
+		user, _ := cmd.Flags().GetString("user")
 		domain, _ := cmd.Flags().GetString("domain")
 		php, _ := cmd.Flags().GetString("php")
 		repository, _ := cmd.Flags().GetString("repository")
@@ -128,8 +128,8 @@ var appsCreateCmd = &cobra.Command{
 		custom, _ := cmd.Flags().GetBool("custom")
 		docroot, _ := cmd.Flags().GetString("docroot")
 
-		if name == "" {
-			name = output.ReadInput("App name")
+		if user == "" {
+			user = output.ReadInput("App username")
 		}
 		if domain == "" {
 			domain = output.ReadInput("Domain")
@@ -139,7 +139,7 @@ var appsCreateCmd = &cobra.Command{
 		}
 
 		body := map[string]interface{}{
-			"name":   name,
+			"user":   user,
 			"domain": domain,
 			"php":    php,
 		}
@@ -157,13 +157,13 @@ var appsCreateCmd = &cobra.Command{
 			body["branch"] = branch
 		}
 
-		output.Info("Creating app '%s'...", name)
+		output.Info("Creating app '%s'...", user)
 		if err := client.DoAsyncAndWait("POST", "/api/apps", body); err != nil {
 			output.Error("Failed to create app: %s", err)
 			return err
 		}
 
-		output.Success("App '%s' created successfully", name)
+		output.Success("App '%s' created successfully", user)
 		fmt.Println()
 		return nil
 	},
@@ -273,7 +273,7 @@ func truncate(s string, max int) string {
 }
 
 func init() {
-	appsCreateCmd.Flags().String("name", "", "App name")
+	appsCreateCmd.Flags().String("user", "", "App username")
 	appsCreateCmd.Flags().String("domain", "", "Domain name")
 	appsCreateCmd.Flags().String("php", "", "PHP version (8.2/8.3/8.4/8.5)")
 	appsCreateCmd.Flags().String("repository", "", "Git repository SSH URL")
