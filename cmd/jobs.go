@@ -25,8 +25,8 @@ var jobsShowCmd = &cobra.Command{
 			return err
 		}
 
-		var job api.JobStatus
-		if err := client.Get(fmt.Sprintf("/api/jobs/%s", args[0]), &job); err != nil {
+		job, err := client.GetJob(args[0])
+		if err != nil {
 			output.Error("Failed to get job: %s", err)
 			return err
 		}

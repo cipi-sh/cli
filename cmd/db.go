@@ -24,35 +24,36 @@ var dbListCmd = &cobra.Command{
 			return err
 		}
 
-		var result struct {
-			Data []map[string]interface{} `json:"data"`
-		}
-
-		if err := client.Get("/api/dbs", &result); err != nil {
+		dbs, err := client.ListDatabases()
+		if err != nil {
 			output.Error("Failed to list databases: %s", err)
 			return err
 		}
+
+		result := struct {
+			Data []map[string]interface{} `json:"data"`
+		}{Data: dbs}
 
 		if jsonFlag {
 			output.PrintJSON(result)
 			return nil
 		}
 
-		if len(result.Data) == 0 {
+		if len(dbs) == 0 {
 			output.Warn("No databases found")
 			return nil
 		}
 
 		output.Header("Databases")
 		t := output.NewTable("NAME", "SIZE")
-		for _, db := range result.Data {
+		for _, db := range dbs {
 			t.Row(
 				str(db, "name"),
 				str(db, "size"),
 			)
 		}
 		t.Flush()
-		output.Dim.Printf("  Total: %d database(s)\n\n", len(result.Data))
+		output.Dim.Printf("  Total: %d database(s)\n\n", len(dbs))
 		return nil
 	},
 }
