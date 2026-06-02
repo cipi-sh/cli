@@ -119,6 +119,15 @@ cipi-cli configure                          Set up API endpoint and token
 cipi-cli configure show                     Show current configuration
 ```
 
+### Update
+
+```
+cipi-cli update                             Update the CLI to the latest release
+cipi-cli update --force                     Reinstall even if already up to date
+```
+
+Downloads the matching binary from the latest [GitHub Release](https://github.com/cipi-sh/cli/releases), verifies its SHA-256 checksum, and replaces the running binary in place. If it is installed in a system path (e.g. `/usr/local/bin`), run it with `sudo cipi-cli update`.
+
 ### Other
 
 ```
