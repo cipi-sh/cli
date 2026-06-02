@@ -64,6 +64,8 @@ cipi-cli apps show <name>                   Show application details
 cipi-cli apps create [flags]                Create a new application
 cipi-cli apps edit <name> [flags]           Edit an application
 cipi-cli apps delete <name> [-y]            Delete an application
+cipi-cli apps suspend <name>                Suspend an application (HTTP 503)
+cipi-cli apps unsuspend <name>              Bring a suspended application back online
 ```
 
 **Create flags:** `--name`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`

@@ -44,7 +44,7 @@ var appsListCmd = &cobra.Command{
 		}
 
 		output.Header("Applications")
-		t := output.NewTable("APP", "DOMAIN", "PHP", "REPOSITORY", "BRANCH")
+		t := output.NewTable("APP", "DOMAIN", "PHP", "REPOSITORY", "BRANCH", "SUSPENDED")
 		for _, app := range result.Data {
 			t.Row(
 				str(app, "app"),
@@ -52,6 +52,7 @@ var appsListCmd = &cobra.Command{
 				str(app, "php"),
 				truncate(str(app, "repository"), 40),
 				str(app, "branch"),
+				str(app, "suspended"),
 			)
 		}
 		t.Flush()
@@ -95,6 +96,7 @@ var appsShowCmd = &cobra.Command{
 		output.KeyValue(nil, "User", str(app, "user"))
 		output.KeyValue(nil, "Custom", str(app, "custom"))
 		output.KeyValue(nil, "Docroot", str(app, "docroot"))
+		output.KeyValue(nil, "Suspended", str(app, "suspended"))
 		output.KeyValue(nil, "Created", str(app, "created_at"))
 
 		if aliases, ok := app["aliases"].([]interface{}); ok && len(aliases) > 0 {
@@ -243,6 +245,52 @@ var appsDeleteCmd = &cobra.Command{
 	},
 }
 
+var appsSuspendCmd = &cobra.Command{
+	Use:   "suspend [name]",
+	Short: "Suspend an application (serve an HTTP 503 page)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := api.NewClient()
+		if err != nil {
+			output.Error("%s", err)
+			return err
+		}
+
+		output.Info("Suspending app '%s'...", args[0])
+		if err := client.DoAsyncAndWait("POST", fmt.Sprintf("/api/apps/%s/suspend", args[0]), nil); err != nil {
+			output.Error("Failed to suspend app: %s", err)
+			return err
+		}
+
+		output.Success("App '%s' suspended successfully", args[0])
+		fmt.Println()
+		return nil
+	},
+}
+
+var appsUnsuspendCmd = &cobra.Command{
+	Use:   "unsuspend [name]",
+	Short: "Unsuspend an application (bring it back online)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := api.NewClient()
+		if err != nil {
+			output.Error("%s", err)
+			return err
+		}
+
+		output.Info("Unsuspending app '%s'...", args[0])
+		if err := client.DoAsyncAndWait("POST", fmt.Sprintf("/api/apps/%s/unsuspend", args[0]), nil); err != nil {
+			output.Error("Failed to unsuspend app: %s", err)
+			return err
+		}
+
+		output.Success("App '%s' unsuspended successfully", args[0])
+		fmt.Println()
+		return nil
+	},
+}
+
 func str(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok && v != nil {
 		switch val := v.(type) {
@@ -288,6 +336,6 @@ func init() {
 
 	appsDeleteCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
 
-	appsCmd.AddCommand(appsListCmd, appsShowCmd, appsCreateCmd, appsEditCmd, appsDeleteCmd)
+	appsCmd.AddCommand(appsListCmd, appsShowCmd, appsCreateCmd, appsEditCmd, appsDeleteCmd, appsSuspendCmd, appsUnsuspendCmd)
 	rootCmd.AddCommand(appsCmd)
 }
