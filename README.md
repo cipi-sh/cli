@@ -178,11 +178,13 @@ Write operations (create, edit, delete, deploy, SSL, etc.) are asynchronous on t
 Releases are automated via GitHub Actions. To publish a new version:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-The pipeline builds binaries for Linux (amd64/arm64) and macOS (amd64/arm64), generates SHA-256 checksums, and creates a GitHub Release with all artifacts attached.
+Prefer tags with a `v` prefix (`v1.0.0`). The pipeline builds binaries for Linux (amd64/arm64) and macOS (amd64/arm64), generates SHA-256 checksums, and creates a GitHub Release with all artifacts attached.
+
+If a release is missing binaries, re-run the **Release** workflow manually from GitHub Actions (workflow dispatch) using the tag name.
 
 ### Manual cross-compilation
 

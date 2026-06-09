@@ -64,7 +64,13 @@ var updateCmd = &cobra.Command{
 		assetURL := findAsset(release.Assets, assetName)
 		if assetURL == "" {
 			output.Error("No prebuilt binary for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, latest)
-			return fmt.Errorf("asset %q not found", assetName)
+			if names := assetNames(release.Assets); len(names) == 0 {
+				output.Info("Release %s was published without binaries — the CI build may not have run.", latest)
+				output.Info("Maintainers: re-run the Release workflow for this tag, or publish a new tag (e.g. v1.0.1).")
+			} else {
+				output.Info("Available assets in %s: %s", latest, strings.Join(names, ", "))
+			}
+			return fmt.Errorf("asset %q not found in release %s", assetName, latest)
 		}
 
 		exePath, err := os.Executable()
@@ -146,6 +152,16 @@ func findAsset(assets []ghAsset, name string) string {
 		}
 	}
 	return ""
+}
+
+func assetNames(assets []ghAsset) []string {
+	names := make([]string, 0, len(assets))
+	for _, a := range assets {
+		if a.Name != "" {
+			names = append(names, a.Name)
+		}
+	}
+	return names
 }
 
 func download(url string) ([]byte, error) {
