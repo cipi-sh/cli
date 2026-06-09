@@ -19,7 +19,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "cipi-cli",
 	Short: "CLI for Cipi Server Panel",
-	Long:  "Manage your Cipi servers, apps, databases, SSL certificates, and deployments from the command line.",
+	Long:  "Manage your Cipi servers, apps, databases, SSL certificates, and deployments from the command line.\n\nUse a profile prefix to target a specific server: cipi-cli prod apps list",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if noColor {
 			color.NoColor = true
@@ -52,6 +52,7 @@ var versionCmd = &cobra.Command{
 }
 
 func Execute() {
+	stripProfileArg()
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}

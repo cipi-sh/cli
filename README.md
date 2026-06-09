@@ -26,10 +26,11 @@ sudo mv cipi-cli-* /usr/local/bin/cipi-cli
 
 ### 1. Configure
 
-Set up the connection to your Cipi API server:
+Set up the connection to your Cipi API server. Each profile maps to one server:
 
 ```bash
-cipi-cli configure
+cipi-cli configure --profile prod
+cipi-cli configure --profile staging
 ```
 
 You will be prompted for:
@@ -37,21 +38,38 @@ You will be prompted for:
 - **API endpoint** — the URL of your Cipi API (e.g. `https://api.example.com`)
 - **Token** — a Sanctum token created with `cipi api token create` on your server
 
-Credentials are stored in `~/.cipi/config.json` (permissions `0600`).
+Credentials are stored per profile in `~/.cipi/config.json` (permissions `0600`).
 
 You can also pass values directly:
 
 ```bash
-cipi-cli configure --endpoint https://api.example.com --token "1|yourtoken..."
+cipi-cli configure --profile prod --endpoint https://api.example.com --token "1|yourtoken..."
+```
+
+Manage profiles:
+
+```bash
+cipi-cli profiles
+cipi-cli profiles list
+cipi-cli profiles default prod
+cipi-cli profiles show prod
 ```
 
 ### 2. Use
 
+Prefix commands with a profile name to target that server:
+
+```bash
+cipi-cli prod apps list
+cipi-cli staging apps show myapp
+cipi-cli prod deploy myapp
+cipi-cli prod ssl install myapp
+```
+
+If you set a default profile (`cipi-cli configure default prod`), you can omit the prefix:
+
 ```bash
 cipi-cli apps list
-cipi-cli apps show myapp
-cipi-cli deploy myapp
-cipi-cli ssl install myapp
 ```
 
 ## Commands
@@ -115,8 +133,17 @@ cipi-cli jobs wait <id>                     Wait for a job to complete
 ### Configuration
 
 ```
-cipi-cli configure                          Set up API endpoint and token
-cipi-cli configure show                     Show current configuration
+cipi-cli configure [--profile NAME]         Set up API endpoint and token for a profile
+```
+
+### Profiles
+
+```
+cipi-cli profiles                           List configured profiles
+cipi-cli profiles list                      List configured profiles
+cipi-cli profiles show [profile]            Show one or all profiles
+cipi-cli profiles default <profile>         Set the default profile
+cipi-cli profiles delete <profile> [-y]     Delete a profile
 ```
 
 ### Update
