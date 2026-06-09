@@ -86,9 +86,15 @@ cipi-cli apps suspend <name>                Suspend an application (HTTP 503)
 cipi-cli apps unsuspend <name>              Bring a suspended application back online
 ```
 
-**Create flags:** `--name`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`
+**Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`
 
-**Edit flags:** `--php`, `--repository`, `--branch`, `--domain`
+**Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+)
+
+### Domains
+
+```
+cipi-cli domains                            List every domain and alias across all apps
+```
 
 ### Deploy
 
@@ -203,6 +209,14 @@ cipi api token create
 ```
 
 See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for details.
+
+| Feature | Minimum Cipi | Minimum API |
+| --- | --- | --- |
+| Suspend / unsuspend | 4.5.8 | 1.8.1 |
+| Rename primary domain (`apps edit --domain`) | 4.6.2 | 1.9.0 |
+| Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
+
+New app PHP versions must be **8.3**, **8.4**, or **8.5** (Cipi 4.5.4+).
 
 ## License
 

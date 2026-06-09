@@ -137,7 +137,7 @@ var appsCreateCmd = &cobra.Command{
 			domain = output.ReadInput("Domain")
 		}
 		if php == "" {
-			php = output.ReadInput("PHP version (8.2/8.3/8.4/8.5)")
+			php = output.ReadInput("PHP version (8.3/8.4/8.5)")
 		}
 
 		body := map[string]interface{}{
@@ -323,7 +323,7 @@ func truncate(s string, max int) string {
 func init() {
 	appsCreateCmd.Flags().String("user", "", "App username")
 	appsCreateCmd.Flags().String("domain", "", "Domain name")
-	appsCreateCmd.Flags().String("php", "", "PHP version (8.2/8.3/8.4/8.5)")
+	appsCreateCmd.Flags().String("php", "", "PHP version (8.3/8.4/8.5)")
 	appsCreateCmd.Flags().String("repository", "", "Git repository SSH URL")
 	appsCreateCmd.Flags().String("branch", "", "Git branch")
 	appsCreateCmd.Flags().Bool("custom", false, "Create as custom app (non-Laravel)")
@@ -332,7 +332,7 @@ func init() {
 	appsEditCmd.Flags().String("php", "", "PHP version")
 	appsEditCmd.Flags().String("repository", "", "Git repository SSH URL")
 	appsEditCmd.Flags().String("branch", "", "Git branch")
-	appsEditCmd.Flags().String("domain", "", "Domain name")
+	appsEditCmd.Flags().String("domain", "", "New primary domain (requires Cipi 4.6.2+ / API 1.9.0+)")
 
 	appsDeleteCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
 
