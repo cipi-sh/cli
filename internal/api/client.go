@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,11 +22,17 @@ type Client struct {
 }
 
 type APIError struct {
-	Message string              `json:"message"`
-	Errors  map[string][]string `json:"errors,omitempty"`
+	Message   string              `json:"message"`
+	ErrorText string              `json:"error,omitempty"`
+	Errors    map[string][]string `json:"errors,omitempty"`
+	Status    int                 `json:"-"`
 }
 
 func (e *APIError) Error() string {
+	msg := e.Message
+	if msg == "" {
+		msg = e.ErrorText
+	}
 	if len(e.Errors) > 0 {
 		var parts []string
 		for field, msgs := range e.Errors {
@@ -33,9 +40,32 @@ func (e *APIError) Error() string {
 				parts = append(parts, fmt.Sprintf("%s: %s", field, msg))
 			}
 		}
-		return fmt.Sprintf("%s (%s)", e.Message, strings.Join(parts, "; "))
+		return fmt.Sprintf("%s (%s)", msg, strings.Join(parts, "; "))
 	}
-	return e.Message
+	if e.Status > 0 && msg != "" {
+		return fmt.Sprintf("HTTP %d: %s", e.Status, msg)
+	}
+	return msg
+}
+
+func (e *APIError) IsRouteNotFound() bool {
+	return strings.Contains(strings.ToLower(e.Message), "could not be found")
+}
+
+func RouteNotFoundHint(err error, minVersion, feature string) string {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.IsRouteNotFound() {
+		return fmt.Sprintf(
+			"%s — update cipi/api to %s+ on your server (%s)",
+			apiErr.Message,
+			minVersion,
+			feature,
+		)
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 type AsyncResponse struct {
@@ -117,7 +147,8 @@ func (c *Client) parseResponse(resp *http.Response, target interface{}) error {
 
 	if resp.StatusCode >= 400 {
 		var apiErr APIError
-		if json.Unmarshal(data, &apiErr) == nil && apiErr.Message != "" {
+		if json.Unmarshal(data, &apiErr) == nil && (apiErr.Message != "" || apiErr.ErrorText != "") {
+			apiErr.Status = resp.StatusCode
 			return &apiErr
 		}
 		return fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(data))
@@ -153,7 +184,8 @@ func (c *Client) GetJob(jobID string) (*JobStatus, error) {
 	}
 	if resp.StatusCode >= 400 {
 		var apiErr APIError
-		if json.Unmarshal(data, &apiErr) == nil && apiErr.Message != "" {
+		if json.Unmarshal(data, &apiErr) == nil && (apiErr.Message != "" || apiErr.ErrorText != "") {
+			apiErr.Status = resp.StatusCode
 			return nil, &apiErr
 		}
 		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(data))
@@ -190,7 +222,8 @@ func (c *Client) ListDatabases() ([]map[string]interface{}, error) {
 	}
 	if resp.StatusCode >= 400 {
 		var apiErr APIError
-		if json.Unmarshal(body, &apiErr) == nil && apiErr.Message != "" {
+		if json.Unmarshal(body, &apiErr) == nil && (apiErr.Message != "" || apiErr.ErrorText != "") {
+			apiErr.Status = resp.StatusCode
 			return nil, &apiErr
 		}
 		return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, string(body))

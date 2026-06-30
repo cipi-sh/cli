@@ -325,7 +325,11 @@ var appsLogsCmd = &cobra.Command{
 		}
 
 		if err := client.Get(path, &result); err != nil {
-			output.Error("Failed to read logs: %s", err)
+			msg := api.RouteNotFoundHint(err, "1.11.9", "GET /api/apps/{name}/logs")
+			if apiErr, ok := err.(*api.APIError); ok && apiErr.Status >= 500 {
+				msg = fmt.Sprintf("%s — check storage/logs/laravel.log on the Cipi API host", apiErr.Error())
+			}
+			output.Error("Failed to read logs: %s", msg)
 			return err
 		}
 
