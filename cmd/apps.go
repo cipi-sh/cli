@@ -139,6 +139,17 @@ var appsCreateCmd = &cobra.Command{
 		if php == "" {
 			php = output.ReadInput("PHP version (8.3/8.4/8.5)")
 		}
+		if repository == "" && !custom {
+			repository = output.ReadInput("Git repository SSH URL")
+		}
+		if branch == "" && !custom {
+			branch = output.ReadInput("Git branch")
+		}
+
+		if !custom && repository == "" {
+			output.Error("Repository is required")
+			return fmt.Errorf("repository is required")
+		}
 
 		body := map[string]interface{}{
 			"user":   user,
