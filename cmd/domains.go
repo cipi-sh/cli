@@ -59,24 +59,22 @@ var domainsCmd = &cobra.Command{
 		}
 
 		output.Header("Domains")
-		t := output.NewTable("DOMAIN", "APP", "KIND", "TYPE", "PHP", "DOCROOT", "BRANCH", "REPOSITORY", "SUSPENDED")
+		t := output.NewTable("DOMAIN", "APP", "KIND", "TYPE", "PHP", "DOCROOT", "BRANCH", "REPOSITORY", "STATUS")
 		suspendedApps := map[string]struct{}{}
 		for _, row := range rows {
-			suspended := "no"
 			if row.Suspended {
-				suspended = "yes"
 				suspendedApps[row.App] = struct{}{}
 			}
 			t.Row(
 				row.Domain,
 				row.App,
-				row.Kind,
+				output.KindBadge(row.Kind),
 				row.Type,
 				row.PHP,
 				row.Docroot,
 				row.Branch,
 				truncate(row.Repository, 40),
-				suspended,
+				output.StatusSuspended(boolSuspended(row.Suspended)),
 			)
 		}
 		t.Flush()
@@ -85,9 +83,16 @@ var domainsCmd = &cobra.Command{
 		if len(suspendedApps) > 0 {
 			suspNote = fmt.Sprintf(" — %d suspended", len(suspendedApps))
 		}
-		output.Dim.Printf("  %d domain(s) across %d app(s)%s\n\n", len(rows), len(result.Data), suspNote)
+		output.Footer("%d domain(s) across %d app(s)%s", len(rows), len(result.Data), suspNote)
 		return nil
 	},
+}
+
+func boolSuspended(v bool) string {
+	if v {
+		return "yes"
+	}
+	return "no"
 }
 
 func buildDomainRows(apps []map[string]interface{}) []domainRow {

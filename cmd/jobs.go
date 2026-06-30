@@ -37,21 +37,11 @@ var jobsShowCmd = &cobra.Command{
 		}
 
 		output.Header("Job Status")
-		output.KeyValue(nil, "ID", fmt.Sprintf("%v", job.ID))
-
-		switch job.Status {
-		case "completed", "success", "finished":
-			output.KeyValue(nil, "Status", output.Green.Sprint(job.Status))
-		case "failed", "error":
-			output.KeyValue(nil, "Status", output.Red.Sprint(job.Status))
-		case "pending", "processing", "running":
-			output.KeyValue(nil, "Status", output.Yellow.Sprint(job.Status))
-		default:
-			output.KeyValue(nil, "Status", job.Status)
-		}
+		output.KeyValueDots(nil, "ID", fmt.Sprintf("%v", job.ID))
+		output.KeyValueDots(nil, "Status", output.StatusJob(job.Status))
 
 		if job.Error != "" {
-			output.KeyValue(nil, "Error", output.Red.Sprint(job.Error))
+			output.KeyValueDots(nil, "Error", output.Red.Sprint(job.Error))
 		}
 
 		fmt.Println()
