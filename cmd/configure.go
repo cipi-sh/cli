@@ -119,9 +119,9 @@ func listProfiles() error {
 	}
 
 	output.Header("Profiles")
-	output.KeyValueDots(nil, "Config file", config.Path())
+	output.KeyValue(nil, "Config file", config.Path())
 	if defaultProfile != "" {
-		output.KeyValueDots(nil, "Default", defaultProfile)
+		output.KeyValue(nil, "Default", defaultProfile)
 	}
 	fmt.Println()
 	if len(names) == 0 {
@@ -129,7 +129,11 @@ func listProfiles() error {
 		return nil
 	}
 	for _, name := range names {
-		fmt.Printf("%s• %s\n", "  ", output.ProfileName(name, name == defaultProfile))
+		marker := ""
+		if name == defaultProfile {
+			marker = " (default)"
+		}
+		fmt.Printf("  %s%s\n", name, marker)
 	}
 	fmt.Println()
 	return nil
@@ -179,10 +183,10 @@ func showProfile(name string) error {
 	}
 
 	output.Header("Configuration")
-	output.KeyValueDots(nil, "Profile", name)
-	output.KeyValueDots(nil, "Config file", config.Path())
-	output.KeyValueDots(nil, "Endpoint", profile.Endpoint)
-	output.KeyValueDots(nil, "Token", maskToken(profile.Token))
+	output.KeyValue(nil, "Profile", name)
+	output.KeyValue(nil, "Config file", config.Path())
+	output.KeyValue(nil, "Endpoint", profile.Endpoint)
+	output.KeyValue(nil, "Token", maskToken(profile.Token))
 	fmt.Println()
 	return nil
 }
@@ -215,9 +219,9 @@ func showAllProfiles() error {
 	}
 
 	output.Header("Configuration")
-	output.KeyValueDots(nil, "Config file", config.Path())
+	output.KeyValue(nil, "Config file", config.Path())
 	if defaultProfile != "" {
-		output.KeyValueDots(nil, "Default", defaultProfile)
+		output.KeyValue(nil, "Default", defaultProfile)
 	}
 	fmt.Println()
 
@@ -227,8 +231,8 @@ func showAllProfiles() error {
 			return err
 		}
 		output.Header(name)
-		output.KeyValueDots(nil, "Endpoint", profile.Endpoint)
-		output.KeyValueDots(nil, "Token", maskToken(profile.Token))
+		output.KeyValue(nil, "Endpoint", profile.Endpoint)
+		output.KeyValue(nil, "Token", maskToken(profile.Token))
 		fmt.Println()
 	}
 	return nil

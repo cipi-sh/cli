@@ -53,7 +53,7 @@ var dbListCmd = &cobra.Command{
 			)
 		}
 		t.Flush()
-		output.Footer("Total: %d database(s)", len(dbs))
+		output.Dim.Printf("  Total: %d database(s)\n\n", len(dbs))
 		return nil
 	},
 }

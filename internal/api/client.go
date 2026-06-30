@@ -12,7 +12,6 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/cipi-sh/cli/internal/config"
 	"github.com/cipi-sh/cli/internal/output"
-	"github.com/fatih/color"
 )
 
 type Client struct {
@@ -297,8 +296,8 @@ func (c *Client) DoAsync(method, path string, body interface{}) (*AsyncResponse,
 }
 
 func (c *Client) WaitForJob(jobID string) (*JobStatus, error) {
-	s := spinner.New(spinner.CharSets[11], 100*time.Millisecond)
-	s.Suffix = "  " + color.New(color.FgHiCyan).Sprint("Processing") + color.New(color.Faint).Sprint(" · job "+jobID)
+	s := spinner.New(spinner.CharSets[14], 120*time.Millisecond)
+	s.Suffix = "  Processing..."
 	s.Color("cyan")
 	s.Start()
 	defer s.Stop()

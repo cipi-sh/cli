@@ -27,7 +27,9 @@ var rootCmd = &cobra.Command{
 		output.JSONOutput = jsonFlag
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		output.Welcome()
+		output.Banner()
+		output.Dim.Println("  Use 'cipi-cli --help' to see available commands.")
+		fmt.Println()
 	},
 }
 
@@ -42,9 +44,9 @@ var versionCmd = &cobra.Command{
 			})
 			return
 		}
-		output.Header("Version")
-		output.KeyValueDots(nil, "Version", Version)
-		output.KeyValueDots(nil, "Build", BuildTime)
+		fmt.Println()
+		output.KeyValue(nil, "Version", Version)
+		output.KeyValue(nil, "Build", BuildTime)
 		fmt.Println()
 	},
 }

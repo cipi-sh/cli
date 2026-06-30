@@ -44,7 +44,7 @@ var appsListCmd = &cobra.Command{
 		}
 
 		output.Header("Applications")
-		t := output.NewTable("APP", "DOMAIN", "PHP", "REPOSITORY", "BRANCH", "STATUS")
+		t := output.NewTable("APP", "DOMAIN", "PHP", "REPOSITORY", "BRANCH", "SUSPENDED")
 		for _, app := range result.Data {
 			t.Row(
 				str(app, "app"),
@@ -52,11 +52,11 @@ var appsListCmd = &cobra.Command{
 				str(app, "php"),
 				truncate(str(app, "repository"), 40),
 				str(app, "branch"),
-				output.StatusSuspended(str(app, "suspended")),
+				str(app, "suspended"),
 			)
 		}
 		t.Flush()
-		output.Footer("Total: %d app(s)", len(result.Data))
+		output.Dim.Printf("  Total: %d app(s)\n\n", len(result.Data))
 		return nil
 	},
 }
@@ -88,20 +88,20 @@ var appsShowCmd = &cobra.Command{
 
 		app := result.Data
 		output.Header(fmt.Sprintf("App: %s", str(app, "app")))
-		output.KeyValueDots(nil, "App", str(app, "app"))
-		output.KeyValueDots(nil, "Domain", str(app, "domain"))
-		output.KeyValueDots(nil, "PHP", str(app, "php"))
-		output.KeyValueDots(nil, "Repository", str(app, "repository"))
-		output.KeyValueDots(nil, "Branch", str(app, "branch"))
-		output.KeyValueDots(nil, "User", str(app, "user"))
-		output.KeyValueDots(nil, "Custom", output.StatusYesNo(str(app, "custom")))
-		output.KeyValueDots(nil, "Docroot", str(app, "docroot"))
-		output.KeyValueDots(nil, "Status", output.StatusSuspended(str(app, "suspended")))
-		output.KeyValueDots(nil, "Created", str(app, "created_at"))
+		output.KeyValue(nil, "App", str(app, "app"))
+		output.KeyValue(nil, "Domain", str(app, "domain"))
+		output.KeyValue(nil, "PHP", str(app, "php"))
+		output.KeyValue(nil, "Repository", str(app, "repository"))
+		output.KeyValue(nil, "Branch", str(app, "branch"))
+		output.KeyValue(nil, "User", str(app, "user"))
+		output.KeyValue(nil, "Custom", str(app, "custom"))
+		output.KeyValue(nil, "Docroot", str(app, "docroot"))
+		output.KeyValue(nil, "Suspended", str(app, "suspended"))
+		output.KeyValue(nil, "Created", str(app, "created_at"))
 
 		if aliases, ok := app["aliases"].([]interface{}); ok && len(aliases) > 0 {
 			fmt.Println()
-			output.Header("Aliases")
+			output.Dim.Println("  Aliases")
 			for _, a := range aliases {
 				fmt.Printf("    • %v\n", a)
 			}
