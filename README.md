@@ -84,11 +84,14 @@ cipi-cli apps edit <name> [flags]           Edit an application
 cipi-cli apps delete <name> [-y]            Delete an application
 cipi-cli apps suspend <name>                Suspend an application (HTTP 503)
 cipi-cli apps unsuspend <name>              Bring a suspended application back online
+cipi-cli apps logs <name> [flags]           Read application logs
 ```
 
 **Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`
 
 **Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+)
+
+**Logs flags:** `--type` (default `all`), `--page` (default `1`), `--per-page` (default `50`, max `1000`; requires API 1.11.9+)
 
 ### Domains
 
@@ -214,6 +217,7 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | --- | --- | --- |
 | Suspend / unsuspend | 4.5.8 | 1.8.1 |
 | Rename primary domain (`apps edit --domain`) | 4.6.2 | 1.9.0 |
+| App logs (`apps logs`) | — | 1.11.9 |
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
 
 New app PHP versions must be **8.3**, **8.4**, or **8.5** (Cipi 4.5.4+).
