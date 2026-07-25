@@ -166,6 +166,15 @@ cipi-cli update --force                     Reinstall even if already up to date
 
 Downloads the matching binary from the latest [GitHub Release](https://github.com/cipi-sh/cli/releases), verifies its SHA-256 checksum, and replaces the running binary in place. If it is installed in a system path (e.g. `/usr/local/bin`), run it with `sudo cipi-cli update`.
 
+### Shell completion
+
+```
+cipi-cli completion install                 Auto-detect shell and install completion
+cipi-cli completion install --shell zsh     Install for a specific shell (zsh|bash|fish)
+```
+
+Writes the script under `~/.cipi/completions/` (or fish’s completions dir) and, for zsh/bash, appends a source line to your rc file. Reload the shell afterwards.
+
 ### Other
 
 ```
