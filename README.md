@@ -24,13 +24,16 @@ sudo mv cipi-cli-* /usr/local/bin/cipi-cli
 
 ## Quick start
 
-### 1. Configure
+### Mental model: one profile = one server
 
-Set up the connection to your Cipi API server. Each profile maps to one server:
+A **profile** is a named connection to a Cipi server (API endpoint + token).  
+Use as many profiles as you have servers. The alias `servers` works like `profiles`.
+
+### 1. Add servers
 
 ```bash
 cipi-cli configure --profile prod
-cipi-cli configure --profile staging
+cipi-cli profiles add staging
 ```
 
 You will be prompted for:
@@ -40,24 +43,25 @@ You will be prompted for:
 
 Credentials are stored per profile in `~/.cipi/config.json` (permissions `0600`).
 
-You can also pass values directly:
+Non-interactive:
 
 ```bash
 cipi-cli configure --profile prod --endpoint https://api.example.com --token "1|yourtoken..."
+cipi-cli profiles add staging --endpoint https://staging.example.com --token "1|yourtoken..."
 ```
 
-Manage profiles:
+### 2. Manage servers
 
 ```bash
-cipi-cli profiles
-cipi-cli profiles list
-cipi-cli profiles default prod
-cipi-cli profiles show prod
+cipi-cli profiles                 # list servers (alias: cipi-cli servers)
+cipi-cli profiles show prod       # inspect one server
+cipi-cli profiles use prod        # set default server
+cipi-cli profiles delete staging  # remove a server profile
 ```
 
-### 2. Use
+### 3. Run commands
 
-Prefix commands with a profile name to target that server:
+Prefix any command with the profile name to target that server:
 
 ```bash
 cipi-cli prod apps list
@@ -66,10 +70,10 @@ cipi-cli prod deploy myapp
 cipi-cli prod ssl install myapp
 ```
 
-If you set a default profile (`cipi-cli configure default prod`), you can omit the prefix:
+After `cipi-cli profiles use prod`, you can omit the prefix:
 
 ```bash
-cipi-cli apps list
+cipi-cli apps list                # uses the default profile (prod)
 ```
 
 ## Commands
@@ -139,21 +143,19 @@ cipi-cli jobs show <id>                     Show job status
 cipi-cli jobs wait <id>                     Wait for a job to complete
 ```
 
-### Configuration
+### Configuration & servers (profiles)
 
 ```
-cipi-cli configure [--profile NAME]         Set up API endpoint and token for a profile
+cipi-cli configure [--profile NAME]         Add/update a server profile (endpoint + token)
+cipi-cli profiles                           List configured servers
+cipi-cli profiles add [name]                Add/update a server profile
+cipi-cli profiles list                      List configured servers
+cipi-cli profiles show [profile]            Show one or all server profiles
+cipi-cli profiles use <profile>             Set the default server (alias: default)
+cipi-cli profiles delete <profile> [-y]     Delete a server profile
 ```
 
-### Profiles
-
-```
-cipi-cli profiles                           List configured profiles
-cipi-cli profiles list                      List configured profiles
-cipi-cli profiles show [profile]            Show one or all profiles
-cipi-cli profiles default <profile>         Set the default profile
-cipi-cli profiles delete <profile> [-y]     Delete a profile
-```
+Aliases: `servers` / `server` → `profiles`; `profiles use` → `profiles default`.
 
 ### Update
 

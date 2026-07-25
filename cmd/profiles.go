@@ -8,12 +8,14 @@ import (
 )
 
 var reservedRootCommands = map[string]struct{}{
-	"configure": {},
-	"profiles":  {},
-	"profile":   {},
-	"version":   {},
-	"update":    {},
-	"help":      {},
+	"configure":  {},
+	"profiles":   {},
+	"profile":    {},
+	"servers":    {},
+	"server":     {},
+	"version":    {},
+	"update":     {},
+	"help":       {},
 	"completion": {},
 }
 

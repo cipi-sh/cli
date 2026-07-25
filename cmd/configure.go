@@ -9,63 +9,53 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const profilesHelp = `A profile is one Cipi server (API endpoint + token).
+
+Add a server:
+  cipi-cli configure --profile prod
+  cipi-cli profiles add staging
+
+List servers:
+  cipi-cli profiles
+
+Set the default server (used when you omit the profile prefix):
+  cipi-cli profiles use prod
+
+Run a command against a server:
+  cipi-cli prod apps list          # explicit profile
+  cipi-cli apps list               # uses the default profile
+
+Config file: ~/.cipi/config.json`
+
 var configureCmd = &cobra.Command{
 	Use:   "configure",
-	Short: "Configure API endpoint and authentication token",
-	Long:  "Set up the connection to your Cipi server API. Credentials are stored per profile in ~/.cipi/config.json",
+	Short: "Add or update a server profile (endpoint + token)",
+	Long: `Add or update a server profile.
+
+Each profile maps to one Cipi server. Use a distinct name per server
+(e.g. prod, staging, client-a).
+
+` + profilesHelp,
+	Example: `  # Interactive setup for a server named "prod"
+  cipi-cli configure --profile prod
+
+  # Non-interactive
+  cipi-cli configure --profile staging --endpoint https://api.example.com --token "1|..."
+
+  # First server (uses the name "default")
+  cipi-cli configure`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profile, _ := cmd.Flags().GetString("profile")
 		endpoint, _ := cmd.Flags().GetString("endpoint")
 		token, _ := cmd.Flags().GetString("token")
-
-		if profile == "" {
-			profile = "default"
-		}
-
-		fmt.Println()
-
-		if err := config.ValidateProfileName(profile); err != nil {
-			output.Error("%s", err)
-			return err
-		}
-
-		if endpoint == "" {
-			endpoint = output.ReadInput("Cipi API endpoint (e.g. https://api.example.com)")
-		}
-		if token == "" {
-			token = output.ReadInput("API token")
-		}
-
-		endpoint = strings.TrimRight(endpoint, "/")
-
-		if endpoint == "" || token == "" {
-			output.Error("Endpoint and token are required")
-			return fmt.Errorf("missing required fields")
-		}
-
-		if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-			endpoint = "https://" + endpoint
-		}
-
-		cfg := &config.Profile{
-			Endpoint: endpoint,
-			Token:    token,
-		}
-
-		if err := config.SaveProfile(profile, cfg); err != nil {
-			output.Error("Failed to save configuration: %s", err)
-			return err
-		}
-
-		output.Success("Profile %q saved to %s", profile, config.Path())
-		fmt.Println()
-		return nil
+		return runConfigure(profile, endpoint, token)
 	},
 }
 
 var configureShowCmd = &cobra.Command{
 	Use:   "show [profile]",
 	Short: "Show configuration for one or all profiles",
+	Long:  "Alias of 'cipi-cli profiles show'. Prefer the profiles command.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
@@ -77,7 +67,8 @@ var configureShowCmd = &cobra.Command{
 
 var configureListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List configured profiles",
+	Short: "List configured server profiles",
+	Long:  "Alias of 'cipi-cli profiles'. Prefer the profiles command.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return listProfiles()
 	},
@@ -85,7 +76,8 @@ var configureListCmd = &cobra.Command{
 
 var configureDeleteCmd = &cobra.Command{
 	Use:   "delete <profile>",
-	Short: "Delete a profile",
+	Short: "Delete a server profile",
+	Long:  "Alias of 'cipi-cli profiles delete'. Prefer the profiles command.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
@@ -95,16 +87,91 @@ var configureDeleteCmd = &cobra.Command{
 
 var configureDefaultCmd = &cobra.Command{
 	Use:   "default <profile>",
-	Short: "Set the default profile for commands without a profile prefix",
+	Short: "Set the default server profile",
+	Long:  "Alias of 'cipi-cli profiles use'. Prefer the profiles command.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return setDefaultProfile(args[0])
 	},
 }
 
+func runConfigure(profile, endpoint, token string) error {
+	if profile == "" {
+		profile = "default"
+	}
+
+	fmt.Println()
+
+	if err := config.ValidateProfileName(profile); err != nil {
+		output.Error("%s", err)
+		return err
+	}
+
+	if endpoint == "" {
+		endpoint = output.ReadInput("Cipi API endpoint (e.g. https://api.example.com)")
+	}
+	if token == "" {
+		token = output.ReadInput("API token")
+	}
+
+	endpoint = strings.TrimRight(endpoint, "/")
+
+	if endpoint == "" || token == "" {
+		output.Error("Endpoint and token are required")
+		return fmt.Errorf("missing required fields")
+	}
+
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		endpoint = "https://" + endpoint
+	}
+
+	cfg := &config.Profile{
+		Endpoint: endpoint,
+		Token:    token,
+	}
+
+	if err := config.SaveProfile(profile, cfg); err != nil {
+		output.Error("Failed to save configuration: %s", err)
+		return err
+	}
+
+	_, defaultProfile, _ := config.ListProfiles()
+	output.Success("Server profile %q saved → %s", profile, config.Path())
+	fmt.Println()
+	output.Info("Target this server:  cipi-cli %s apps list", profile)
+	if defaultProfile == profile {
+		output.Info("It is the default profile — you can omit the name:  cipi-cli apps list")
+	} else {
+		output.Info("Make it default:     cipi-cli profiles use %s", profile)
+	}
+	output.Info("List all servers:    cipi-cli profiles")
+	fmt.Println()
+	return nil
+}
+
 func listProfiles() error {
 	names, defaultProfile, err := config.ListProfiles()
 	if err != nil {
+		if strings.Contains(err.Error(), "not configured") {
+			if jsonFlag {
+				output.PrintJSON(map[string]interface{}{
+					"profiles": []string{},
+					"default":  "",
+					"path":     config.Path(),
+				})
+				return nil
+			}
+			output.Header("Server profiles")
+			output.KeyValue(nil, "Config file", config.Path())
+			fmt.Println()
+			output.Warn("No servers configured yet")
+			fmt.Println()
+			output.Info("Add your first server:")
+			output.Dim.Println("  cipi-cli configure --profile prod")
+			output.Dim.Println("  cipi-cli profiles add staging")
+			fmt.Println()
+			return nil
+		}
 		output.Error("%s", err)
 		return err
 	}
@@ -118,30 +185,46 @@ func listProfiles() error {
 		return nil
 	}
 
-	output.Header("Profiles")
+	output.Header("Server profiles")
 	output.KeyValue(nil, "Config file", config.Path())
 	if defaultProfile != "" {
 		output.KeyValue(nil, "Default", defaultProfile)
 	}
 	fmt.Println()
+
 	if len(names) == 0 {
-		output.Warn("No profiles configured")
+		output.Warn("No servers configured yet")
+		fmt.Println()
+		output.Info("Add a server:  cipi-cli configure --profile prod")
+		fmt.Println()
 		return nil
 	}
+
+	table := output.NewTable("PROFILE", "ENDPOINT", "DEFAULT")
 	for _, name := range names {
-		marker := ""
-		if name == defaultProfile {
-			marker = " (default)"
+		profile, err := config.GetProfile(name)
+		if err != nil {
+			return err
 		}
-		fmt.Printf("  %s%s\n", name, marker)
+		isDefault := ""
+		if name == defaultProfile {
+			isDefault = "yes"
+		}
+		table.Row(name, profile.Endpoint, isDefault)
 	}
+	table.Flush()
+
+	output.Dim.Println("  Usage:")
+	output.Dim.Println("    cipi-cli <profile> <command>     target a server for one command")
+	output.Dim.Println("    cipi-cli profiles use <profile>  set the default server")
+	output.Dim.Println("    cipi-cli profiles add <name>     add another server")
 	fmt.Println()
 	return nil
 }
 
 func deleteProfile(name string, yes bool) error {
 	if !yes {
-		if !output.Confirm(fmt.Sprintf("Delete profile %q?", name)) {
+		if !output.Confirm(fmt.Sprintf("Delete server profile %q?", name)) {
 			output.Warn("Cancelled")
 			return nil
 		}
@@ -152,7 +235,7 @@ func deleteProfile(name string, yes bool) error {
 		return err
 	}
 
-	output.Success("Profile %q deleted", name)
+	output.Success("Server profile %q deleted", name)
 	return nil
 }
 
@@ -161,7 +244,14 @@ func setDefaultProfile(name string) error {
 		output.Error("%s", err)
 		return err
 	}
-	output.Success("Default profile set to %q", name)
+	output.Success("Default server set to %q", name)
+	fmt.Println()
+	output.Info("Commands without a profile prefix now use %q:", name)
+	output.Dim.Println("  cipi-cli apps list")
+	fmt.Println()
+	output.Info("Still target another server explicitly:")
+	output.Dim.Printf("  cipi-cli <other-profile> apps list\n")
+	fmt.Println()
 	return nil
 }
 
@@ -172,21 +262,29 @@ func showProfile(name string) error {
 		return err
 	}
 
+	_, defaultProfile, _ := config.ListProfiles()
+
 	if jsonFlag {
-		output.PrintJSON(map[string]string{
+		output.PrintJSON(map[string]interface{}{
 			"profile":  name,
 			"endpoint": profile.Endpoint,
 			"token":    maskToken(profile.Token),
+			"default":  name == defaultProfile,
 			"path":     config.Path(),
 		})
 		return nil
 	}
 
-	output.Header("Configuration")
+	output.Header("Server profile")
 	output.KeyValue(nil, "Profile", name)
+	if name == defaultProfile {
+		output.KeyValue(nil, "Default", "yes")
+	}
 	output.KeyValue(nil, "Config file", config.Path())
 	output.KeyValue(nil, "Endpoint", profile.Endpoint)
 	output.KeyValue(nil, "Token", maskToken(profile.Token))
+	fmt.Println()
+	output.Info("Target this server:  cipi-cli %s apps list", name)
 	fmt.Println()
 	return nil
 }
@@ -218,19 +316,29 @@ func showAllProfiles() error {
 		return nil
 	}
 
-	output.Header("Configuration")
+	output.Header("Server profiles")
 	output.KeyValue(nil, "Config file", config.Path())
 	if defaultProfile != "" {
 		output.KeyValue(nil, "Default", defaultProfile)
 	}
 	fmt.Println()
 
+	if len(names) == 0 {
+		output.Warn("No servers configured yet")
+		fmt.Println()
+		return nil
+	}
+
 	for _, name := range names {
 		profile, err := config.GetProfile(name)
 		if err != nil {
 			return err
 		}
-		output.Header(name)
+		title := name
+		if name == defaultProfile {
+			title = name + " (default)"
+		}
+		output.Header(title)
 		output.KeyValue(nil, "Endpoint", profile.Endpoint)
 		output.KeyValue(nil, "Token", maskToken(profile.Token))
 		fmt.Println()
@@ -246,7 +354,7 @@ func maskToken(token string) string {
 }
 
 func init() {
-	configureCmd.Flags().String("profile", "default", "Profile name (e.g. prod, staging)")
+	configureCmd.Flags().String("profile", "default", "Server profile name (e.g. prod, staging)")
 	configureCmd.Flags().String("endpoint", "", "Cipi API endpoint URL")
 	configureCmd.Flags().String("token", "", "API authentication token")
 	configureDeleteCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")

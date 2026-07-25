@@ -19,7 +19,24 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "cipi-cli",
 	Short: "CLI for Cipi Server Panel",
-	Long:  "Manage your Cipi servers, apps, databases, SSL certificates, and deployments from the command line.\n\nUse a profile prefix to target a specific server: cipi-cli prod apps list",
+	Long: `Manage your Cipi servers, apps, databases, SSL certificates, and deployments from the command line.
+
+Multi-server (profiles):
+  Each profile is one Cipi server (endpoint + token).
+  Prefix any command with the profile name to target that server.
+
+  cipi-cli configure --profile prod     add a server
+  cipi-cli profiles                     list servers
+  cipi-cli profiles use prod            set default server
+  cipi-cli prod apps list               run against "prod"
+  cipi-cli apps list                    run against the default
+
+Aliases: "servers" works like "profiles" (e.g. cipi-cli servers use prod).`,
+	Example: `  cipi-cli configure --profile prod
+  cipi-cli profiles add staging
+  cipi-cli profiles use prod
+  cipi-cli prod apps list
+  cipi-cli staging deploy myapp`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if noColor {
 			color.NoColor = true
@@ -29,6 +46,7 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		output.Banner()
 		output.Dim.Println("  Use 'cipi-cli --help' to see available commands.")
+		output.Dim.Println("  Multi-server: 'cipi-cli profiles' — each profile is one server.")
 		fmt.Println()
 	},
 }

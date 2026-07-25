@@ -81,15 +81,15 @@ func Load() (*Profile, error) {
 		}
 	}
 	if name == "" {
-		return nil, fmt.Errorf("no profile selected — use 'cipi-cli <profile> <command>' or run 'cipi-cli configure'")
+		return nil, fmt.Errorf("no server selected — use 'cipi-cli <profile> <command>', set a default with 'cipi-cli profiles use <name>', or add one with 'cipi-cli configure --profile <name>'")
 	}
 
 	profile, ok := fc.Profiles[name]
 	if !ok {
-		return nil, fmt.Errorf("profile %q not found — run 'cipi-cli configure list' to see profiles", name)
+		return nil, fmt.Errorf("server profile %q not found — run 'cipi-cli profiles' to list servers", name)
 	}
 	if profile.Endpoint == "" || profile.Token == "" {
-		return nil, fmt.Errorf("profile %q is incomplete — run 'cipi-cli configure --profile %s'", name, name)
+		return nil, fmt.Errorf("server profile %q is incomplete — run 'cipi-cli configure --profile %s' or 'cipi-cli profiles add %s'", name, name, name)
 	}
 
 	return &profile, nil
@@ -99,7 +99,7 @@ func readFile() (*fileConfig, error) {
 	data, err := os.ReadFile(Path())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("not configured — run 'cipi-cli configure' first")
+			return nil, fmt.Errorf("not configured — add a server with 'cipi-cli configure --profile <name>' (or 'cipi-cli profiles add <name>')")
 		}
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
@@ -129,7 +129,7 @@ func readFile() (*fileConfig, error) {
 	}
 
 	if len(fc.Profiles) == 0 {
-		return nil, fmt.Errorf("not configured — run 'cipi-cli configure' first")
+		return nil, fmt.Errorf("not configured — add a server with 'cipi-cli configure --profile <name>' (or 'cipi-cli profiles add <name>')")
 	}
 
 	return &fc, nil
@@ -212,7 +212,7 @@ func GetProfile(name string) (*Profile, error) {
 
 	profile, ok := fc.Profiles[name]
 	if !ok {
-		return nil, fmt.Errorf("profile %q not found", name)
+		return nil, fmt.Errorf("server profile %q not found — run 'cipi-cli profiles'", name)
 	}
 	return &profile, nil
 }
@@ -228,7 +228,7 @@ func DeleteProfile(name string) error {
 	}
 
 	if _, ok := fc.Profiles[name]; !ok {
-		return fmt.Errorf("profile %q not found", name)
+		return fmt.Errorf("server profile %q not found — run 'cipi-cli profiles'", name)
 	}
 
 	delete(fc.Profiles, name)
@@ -260,7 +260,7 @@ func SetDefaultProfile(name string) error {
 	}
 
 	if _, ok := fc.Profiles[name]; !ok {
-		return fmt.Errorf("profile %q not found", name)
+		return fmt.Errorf("server profile %q not found — run 'cipi-cli profiles'", name)
 	}
 
 	fc.Default = name
