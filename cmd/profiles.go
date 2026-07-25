@@ -13,6 +13,8 @@ var reservedRootCommands = map[string]struct{}{
 	"profile":    {},
 	"servers":    {},
 	"server":     {},
+	"api":        {},
+	"status":     {},
 	"version":    {},
 	"update":     {},
 	"help":       {},

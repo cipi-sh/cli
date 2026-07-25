@@ -95,16 +95,26 @@ func NewClient() (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NewClientFromProfile(cfg), nil
+}
 
-	endpoint := strings.TrimRight(cfg.Endpoint, "/")
+// NewClientForProfile builds a client for a named server profile.
+func NewClientForProfile(name string) (*Client, error) {
+	cfg, err := config.LoadNamed(name)
+	if err != nil {
+		return nil, err
+	}
+	return NewClientFromProfile(cfg), nil
+}
 
+func NewClientFromProfile(cfg *config.Profile) *Client {
 	return &Client{
-		BaseURL: endpoint,
+		BaseURL: strings.TrimRight(cfg.Endpoint, "/"),
 		Token:   cfg.Token,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-	}, nil
+	}
 }
 
 func (c *Client) request(method, path string, body interface{}) (*http.Response, error) {

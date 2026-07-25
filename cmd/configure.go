@@ -39,10 +39,13 @@ Each profile maps to one Cipi server. Use a distinct name per server
 	Example: `  # Interactive setup for a server named "prod"
   cipi-cli configure --profile prod
 
+  # Same via api token add
+  cipi-cli api token add prod
+
   # Non-interactive
   cipi-cli configure --profile staging --endpoint https://api.example.com --token "1|..."
 
-  # First server (uses the name "default")
+  # Interactive (asks for profile name — does not assume "default")
   cipi-cli configure`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profile, _ := cmd.Flags().GetString("profile")
@@ -96,19 +99,40 @@ var configureDefaultCmd = &cobra.Command{
 }
 
 func runConfigure(profile, endpoint, token string) error {
-	if profile == "" {
-		profile = "default"
-	}
-
 	fmt.Println()
+
+	if profile == "" {
+		names, _, err := config.ListProfiles()
+		if err == nil && len(names) > 0 {
+			output.Info("Existing profiles: %s", strings.Join(names, ", "))
+		}
+		profile = output.ReadInput("Profile name (e.g. prod, staging)")
+		profile = strings.TrimSpace(profile)
+		if profile == "" {
+			output.Error("Profile name is required — pick an alias for this server (e.g. prod)")
+			output.Info("Example: cipi-cli api token add prod")
+			return fmt.Errorf("profile name is required")
+		}
+	}
 
 	if err := config.ValidateProfileName(profile); err != nil {
 		output.Error("%s", err)
 		return err
 	}
 
+	if config.ProfileExists(profile) {
+		output.Warn("Profile %q already exists — it will be updated", profile)
+	}
+
 	if endpoint == "" {
-		endpoint = output.ReadInput("Cipi API endpoint (e.g. https://api.example.com)")
+		if existing, err := config.GetProfile(profile); err == nil && existing.Endpoint != "" {
+			endpoint = output.ReadInput(fmt.Sprintf("Cipi API endpoint [%s]", existing.Endpoint))
+			if endpoint == "" {
+				endpoint = existing.Endpoint
+			}
+		} else {
+			endpoint = output.ReadInput("Cipi API endpoint (e.g. https://api.example.com)")
+		}
 	}
 	if token == "" {
 		token = output.ReadInput("API token")
@@ -354,7 +378,7 @@ func maskToken(token string) string {
 }
 
 func init() {
-	configureCmd.Flags().String("profile", "default", "Server profile name (e.g. prod, staging)")
+	configureCmd.Flags().String("profile", "", "Server profile name (e.g. prod, staging). Prompted if omitted")
 	configureCmd.Flags().String("endpoint", "", "Cipi API endpoint URL")
 	configureCmd.Flags().String("token", "", "API authentication token")
 	configureDeleteCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")

@@ -32,24 +32,27 @@ Use as many profiles as you have servers. The alias `servers` works like `profil
 ### 1. Add servers
 
 ```bash
-cipi-cli configure --profile prod
-cipi-cli profiles add staging
+cipi-cli api token add prod
+cipi-cli api token add staging
+# or: cipi-cli configure --profile prod
+# or: cipi-cli profiles add staging
 ```
 
 You will be prompted for:
 
+- **Profile name** — alias for this server (e.g. `prod`, `staging`) if you omit it
 - **API endpoint** — the URL of your Cipi API (e.g. `https://api.example.com`)
 - **Token** — a Sanctum token created with `cipi api token create` on your server
 
-Credentials are stored per profile in `~/.cipi/config.json` (permissions `0600`).
+Credentials are stored per profile in `~/.cipi/config.json` (permissions `0600`).  
+Omitting the profile name no longer writes silently to `default` — you will be asked.
 
 Non-interactive:
 
 ```bash
-cipi-cli configure --profile prod --endpoint https://api.example.com --token "1|yourtoken..."
+cipi-cli api token add prod --endpoint https://api.example.com --token "1|yourtoken..."
 cipi-cli profiles add staging --endpoint https://staging.example.com --token "1|yourtoken..."
 ```
-
 ### 2. Manage servers
 
 ```bash
@@ -136,6 +139,18 @@ cipi-cli db restore <name> [-y]             Restore from backup
 cipi-cli db password <name> [-y]            Regenerate password
 ```
 
+### Status
+
+```
+cipi-cli status                             Server status (default profile)
+cipi-cli status <profile>                   Server status for one profile
+cipi-cli <profile> status                   Same, via profile prefix
+cipi-cli status --all                       Summary table for every profile
+cipi-cli status --all --details             Summary + full details per server
+```
+
+Requires the API token ability `status-view` (`GET /api/status`, same data as `cipi status` on the host).
+
 ### Jobs
 
 ```
@@ -146,6 +161,7 @@ cipi-cli jobs wait <id>                     Wait for a job to complete
 ### Configuration & servers (profiles)
 
 ```
+cipi-cli api token add [profile]            Add/update API token for a named profile
 cipi-cli configure [--profile NAME]         Add/update a server profile (endpoint + token)
 cipi-cli profiles                           List configured servers
 cipi-cli profiles add [name]                Add/update a server profile
@@ -155,7 +171,8 @@ cipi-cli profiles use <profile>             Set the default server (alias: defau
 cipi-cli profiles delete <profile> [-y]     Delete a server profile
 ```
 
-Aliases: `servers` / `server` → `profiles`; `profiles use` → `profiles default`.
+Aliases: `servers` / `server` → `profiles`; `profiles use` → `profiles default`.  
+Always pass a profile name (`prod`, `staging`, …) — otherwise the CLI prompts for one.
 
 ### Update
 
@@ -229,6 +246,7 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | Suspend / unsuspend | 4.5.8 | 1.8.1 |
 | Rename primary domain (`apps edit --domain`) | 4.6.2 | 1.9.0 |
 | App logs (`apps logs`) | — | 1.11.9 |
+| Server status (`status`) | — | with `GET /api/status` + `status-view` |
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
 
 New app PHP versions must be **8.3**, **8.4**, or **8.5** (Cipi 4.5.4+).

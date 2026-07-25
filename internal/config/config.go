@@ -65,9 +65,15 @@ func ValidateProfileName(name string) error {
 }
 
 func Load() (*Profile, error) {
+	profile, _, err := LoadWithName()
+	return profile, err
+}
+
+// LoadWithName returns the active/default profile and its name.
+func LoadWithName() (*Profile, string, error) {
 	fc, err := readFile()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	name := activeProfile
@@ -81,18 +87,34 @@ func Load() (*Profile, error) {
 		}
 	}
 	if name == "" {
-		return nil, fmt.Errorf("no server selected — use 'cipi-cli <profile> <command>', set a default with 'cipi-cli profiles use <name>', or add one with 'cipi-cli configure --profile <name>'")
+		return nil, "", fmt.Errorf("no server selected — use 'cipi-cli <profile> <command>', set a default with 'cipi-cli profiles use <name>', or add one with 'cipi-cli configure --profile <name>'")
 	}
 
+	return profileByName(fc, name)
+}
+
+// LoadNamed loads a specific server profile by name.
+func LoadNamed(name string) (*Profile, error) {
+	if err := ValidateProfileName(name); err != nil {
+		return nil, err
+	}
+	fc, err := readFile()
+	if err != nil {
+		return nil, err
+	}
+	profile, _, err := profileByName(fc, name)
+	return profile, err
+}
+
+func profileByName(fc *fileConfig, name string) (*Profile, string, error) {
 	profile, ok := fc.Profiles[name]
 	if !ok {
-		return nil, fmt.Errorf("server profile %q not found — run 'cipi-cli profiles' to list servers", name)
+		return nil, "", fmt.Errorf("server profile %q not found — run 'cipi-cli profiles' to list servers", name)
 	}
 	if profile.Endpoint == "" || profile.Token == "" {
-		return nil, fmt.Errorf("server profile %q is incomplete — run 'cipi-cli configure --profile %s' or 'cipi-cli profiles add %s'", name, name, name)
+		return nil, "", fmt.Errorf("server profile %q is incomplete — run 'cipi-cli configure --profile %s' or 'cipi-cli profiles add %s'", name, name, name)
 	}
-
-	return &profile, nil
+	return &profile, name, nil
 }
 
 func readFile() (*fileConfig, error) {

@@ -42,7 +42,7 @@ You will be prompted for the API endpoint and token unless you pass flags.`,
   cipi-cli servers add client-a`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		profile := "default"
+		profile := ""
 		if len(args) == 1 {
 			profile = args[0]
 		}
