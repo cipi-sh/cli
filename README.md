@@ -142,13 +142,12 @@ cipi-cli db password <name> [-y]            Regenerate password
 ### Status
 
 ```
-cipi-cli status                             Server status (default profile)
-cipi-cli status <profile>                   Server status for one profile
+cipi-cli status                             Global overview — one row per server
+cipi-cli status <profile>                   Full details for one server
 cipi-cli <profile> status                   Same, via profile prefix
-cipi-cli status --all                       Summary table for every profile
-cipi-cli status --all --details             Summary + full details per server
 ```
 
+Global columns: NAME, IP, CPU, RAM, HDD, APPS, SVC, CIPI.  
 Requires the API token ability `status-view` (`GET /api/status`, same data as `cipi status` on the host).
 
 ### Jobs

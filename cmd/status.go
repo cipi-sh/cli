@@ -12,11 +12,11 @@ import (
 )
 
 type serverStatusData struct {
-	System    statusSystem             `json:"system"`
-	Resources statusResources          `json:"resources"`
-	Services  map[string]string        `json:"services"`
-	PHP       []statusPHP              `json:"php"`
-	Apps      int                      `json:"apps"`
+	System    statusSystem      `json:"system"`
+	Resources statusResources   `json:"resources"`
+	Services  map[string]string `json:"services"`
+	PHP       []statusPHP       `json:"php"`
+	Apps      int               `json:"apps"`
 }
 
 type statusSystem struct {
@@ -67,42 +67,28 @@ type profileStatusResult struct {
 
 var statusCmd = &cobra.Command{
 	Use:   "status [profile]",
-	Short: "Show server status (one profile or all)",
+	Short: "Show global server status, or details for one profile",
 	Long: `Show server status from GET /api/status (same data as "cipi status" on the host).
 
 Requires the status-view ability on the API token.
 
-Examples of targeting a server:
-  cipi-cli status                 # default profile
-  cipi-cli status prod            # named profile
-  cipi-cli prod status            # profile prefix (same as above)
-  cipi-cli status --all           # every configured profile`,
+  cipi-cli status              global overview — one row per profile
+  cipi-cli status prod         full details for one server
+  cipi-cli prod status         same, via profile prefix`,
 	Example: `  cipi-cli status
   cipi-cli status prod
-  cipi-cli staging status
-  cipi-cli status --all
-  cipi-cli status all`,
+  cipi-cli staging status`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		all, _ := cmd.Flags().GetBool("all")
-		details, _ := cmd.Flags().GetBool("details")
-		if len(args) == 1 && strings.EqualFold(args[0], "all") {
-			all = true
+		// Bare "status" / "status all" → global overview table.
+		if len(args) == 0 || (len(args) == 1 && strings.EqualFold(args[0], "all")) {
+			return runStatusGlobal()
 		}
-
-		if all {
-			return runStatusAll(details)
-		}
-
-		profileName := ""
-		if len(args) == 1 {
-			profileName = args[0]
-		}
-		return runStatusOne(profileName)
+		return runStatusDetail(args[0])
 	},
 }
 
-func runStatusOne(profileName string) error {
+func runStatusDetail(profileName string) error {
 	var (
 		client *api.Client
 		name   string
@@ -144,7 +130,12 @@ func runStatusOne(profileName string) error {
 	return nil
 }
 
-func runStatusAll(details bool) error {
+func runStatusGlobal() error {
+	// If a profile prefix was used (cipi-cli prod status), show detail for that server.
+	if config.ActiveProfile() != "" {
+		return runStatusDetail(config.ActiveProfile())
+	}
+
 	names, defaultProfile, err := config.ListProfiles()
 	if err != nil {
 		output.Error("%s", err)
@@ -155,6 +146,55 @@ func runStatusAll(details bool) error {
 		return nil
 	}
 
+	results := collectProfileStatuses(names, defaultProfile)
+
+	if jsonFlag {
+		output.PrintJSON(map[string]interface{}{
+			"default": defaultProfile,
+			"servers": results,
+		})
+		return nil
+	}
+
+	output.Header("Servers")
+	t := output.NewTable("NAME", "IP", "CPU", "RAM", "HDD", "APPS", "SVC", "CIPI")
+	failed := 0
+	for _, r := range results {
+		label := r.Profile
+		if r.Default {
+			label = r.Profile + "*"
+		}
+		if !r.OK || r.Data == nil {
+			failed++
+			errMsg := compactError(r.Error)
+			t.Row(label, "—", "—", "—", "—", "—", errMsg, "—")
+			continue
+		}
+		d := r.Data
+		t.Row(
+			label,
+			dash(d.System.IP),
+			formatCPU(d.Resources.CPU),
+			formatRamRow(d.Resources.Memory),
+			formatHddRow(d.Resources.Disk),
+			fmt.Sprintf("%d", d.Apps),
+			servicesSummary(d.Services),
+			dash(d.System.Cipi),
+		)
+	}
+	t.Flush()
+	output.Dim.Println("  * default profile")
+	output.Dim.Println("  Detail: cipi-cli status <name>")
+	fmt.Println()
+
+	if failed > 0 {
+		output.Warn("%d of %d servers unreachable", failed, len(results))
+		fmt.Println()
+	}
+	return nil
+}
+
+func collectProfileStatuses(names []string, defaultProfile string) []profileStatusResult {
 	results := make([]profileStatusResult, 0, len(names))
 	for _, name := range names {
 		profile, err := config.LoadNamed(name)
@@ -187,62 +227,7 @@ func runStatusAll(details bool) error {
 			Data:     data,
 		})
 	}
-
-	if jsonFlag {
-		output.PrintJSON(map[string]interface{}{
-			"default": defaultProfile,
-			"servers": results,
-		})
-		return nil
-	}
-
-	output.Header("Server status (all profiles)")
-	t := output.NewTable("PROFILE", "HOSTNAME", "IP", "CPU", "MEM", "DISK", "APPS", "STATUS")
-	failed := 0
-	for _, r := range results {
-		label := r.Profile
-		if r.Default {
-			label = r.Profile + "*"
-		}
-		if !r.OK || r.Data == nil {
-			failed++
-			errMsg := r.Error
-			if len(errMsg) > 40 {
-				errMsg = errMsg[:37] + "..."
-			}
-			t.Row(label, "—", "—", "—", "—", "—", "—", errMsg)
-			continue
-		}
-		d := r.Data
-		t.Row(
-			label,
-			dash(d.System.Hostname),
-			dash(d.System.IP),
-			formatCPU(d.Resources.CPU),
-			formatMemShort(d.Resources.Memory),
-			formatDiskShort(d.Resources.Disk),
-			fmt.Sprintf("%d", d.Apps),
-			servicesSummary(d.Services),
-		)
-	}
-	t.Flush()
-	output.Dim.Println("  * default profile")
-	fmt.Println()
-
-	if details {
-		for _, r := range results {
-			if !r.OK || r.Data == nil {
-				continue
-			}
-			printStatusDetail(r.Profile, r.Endpoint, r.Data)
-		}
-	}
-
-	if failed > 0 {
-		output.Warn("%d of %d profiles failed", failed, len(results))
-		fmt.Println()
-	}
-	return nil
+	return results
 }
 
 func fetchStatus(client *api.Client) (*serverStatusData, error) {
@@ -270,8 +255,8 @@ func printStatusDetail(profile, endpoint string, data *serverStatusData) {
 	output.KeyValue(nil, "Uptime", dash(data.System.Uptime))
 	output.KeyValue(nil, "Cipi", dash(data.System.Cipi))
 	output.KeyValue(nil, "CPU", formatCPU(data.Resources.CPU))
-	output.KeyValue(nil, "Memory", formatMem(data.Resources.Memory))
-	output.KeyValue(nil, "Disk", formatDisk(data.Resources.Disk))
+	output.KeyValue(nil, "RAM", formatMem(data.Resources.Memory))
+	output.KeyValue(nil, "HDD", formatDisk(data.Resources.Disk))
 	output.KeyValue(nil, "Apps", fmt.Sprintf("%d", data.Apps))
 	fmt.Println()
 
@@ -323,11 +308,11 @@ func formatMem(m *statusMemory) string {
 	return fmt.Sprintf("%d/%d MB (%d%%)", m.UsedMB, m.TotalMB, m.UsagePercent)
 }
 
-func formatMemShort(m *statusMemory) string {
+func formatRamRow(m *statusMemory) string {
 	if m == nil {
 		return "—"
 	}
-	return fmt.Sprintf("%d%%", m.UsagePercent)
+	return fmt.Sprintf("%d%% (%dM)", m.UsagePercent, m.UsedMB)
 }
 
 func formatDisk(d *statusDisk) string {
@@ -343,9 +328,15 @@ func formatDisk(d *statusDisk) string {
 	return fmt.Sprintf("%d%%", d.UsagePercent)
 }
 
-func formatDiskShort(d *statusDisk) string {
+func formatHddRow(d *statusDisk) string {
 	if d == nil {
 		return "—"
+	}
+	if d.Used != "" && d.Total != "" {
+		return fmt.Sprintf("%s/%s %d%%", d.Used, d.Total, d.UsagePercent)
+	}
+	if d.Display != "" {
+		return d.Display
 	}
 	return fmt.Sprintf("%d%%", d.UsagePercent)
 }
@@ -366,6 +357,30 @@ func servicesSummary(services map[string]string) string {
 	return output.Yellow.Sprintf("%d/%d", running, len(services))
 }
 
+func compactError(errMsg string) string {
+	errMsg = strings.TrimSpace(errMsg)
+	switch {
+	case strings.Contains(strings.ToLower(errMsg), "unauthorized"),
+		strings.Contains(strings.ToLower(errMsg), "unauthenticated"),
+		strings.Contains(errMsg, "401"):
+		return "auth"
+	case strings.Contains(strings.ToLower(errMsg), "forbidden"),
+		strings.Contains(errMsg, "403"):
+		return "forbidden"
+	case strings.Contains(strings.ToLower(errMsg), "could not be found"),
+		strings.Contains(errMsg, "404"):
+		return "no-status"
+	case strings.Contains(strings.ToLower(errMsg), "timeout"),
+		strings.Contains(strings.ToLower(errMsg), "connection refused"),
+		strings.Contains(strings.ToLower(errMsg), "no such host"):
+		return "offline"
+	case len(errMsg) > 18:
+		return errMsg[:15] + "..."
+	default:
+		return errMsg
+	}
+}
+
 func dash(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "—"
@@ -374,7 +389,5 @@ func dash(s string) string {
 }
 
 func init() {
-	statusCmd.Flags().Bool("all", false, "Show status for every configured profile")
-	statusCmd.Flags().Bool("details", false, "With --all, also print full details per server")
 	rootCmd.AddCommand(statusCmd)
 }
