@@ -11,13 +11,35 @@ import (
 var aliasesCmd = &cobra.Command{
 	Use:     "aliases",
 	Aliases: []string{"alias"},
-	Short:   "Manage application aliases",
+	Short:   "Manage application domain aliases",
+	Long: `Manage extra domains (aliases) attached to an application.
+
+The primary domain is set on the app; aliases are additional hostnames
+that point to the same site.
+
+  cipi-cli aliases list myapp
+  cipi-cli aliases add myapp www.example.com
+  cipi-cli aliases remove myapp www.example.com
+
+See also: 'cipi-cli domains' for a flat list of every domain across apps.
+
+` + multiServerTip,
+	Example: `  cipi-cli aliases list myapp
+  cipi-cli aliases add myapp www.example.com
+  cipi-cli aliases remove myapp www.example.com -y
+  cipi-cli prod aliases list myapp`,
 }
 
 var aliasesListCmd = &cobra.Command{
-	Use:   "list [app]",
+	Use:   "list <app>",
 	Short: "List aliases for an application",
-	Args:  cobra.ExactArgs(1),
+	Long: `List domain aliases for one application.
+
+  cipi-cli aliases list myapp
+  cipi-cli prod aliases list myapp`,
+	Example: `  cipi-cli aliases list myapp
+  cipi-cli staging aliases list myapp`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -55,9 +77,17 @@ var aliasesListCmd = &cobra.Command{
 }
 
 var aliasesAddCmd = &cobra.Command{
-	Use:   "add [app] [domain]",
+	Use:   "add <app> <domain>",
 	Short: "Add an alias to an application",
-	Args:  cobra.ExactArgs(2),
+	Long: `Attach an extra domain (alias) to an application.
+
+DNS for the domain must already point to the server.
+
+  cipi-cli aliases add myapp www.example.com
+  cipi-cli prod aliases add myapp www.example.com`,
+	Example: `  cipi-cli aliases add myapp www.example.com
+  cipi-cli staging aliases add myapp api.example.com`,
+	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -82,9 +112,17 @@ var aliasesAddCmd = &cobra.Command{
 }
 
 var aliasesRemoveCmd = &cobra.Command{
-	Use:   "remove [app] [domain]",
+	Use:   "remove <app> <domain>",
 	Short: "Remove an alias from an application",
-	Args:  cobra.ExactArgs(2),
+	Long: `Remove a domain alias from an application.
+
+Prompts for confirmation unless -y / --yes is passed.
+
+  cipi-cli aliases remove myapp www.example.com
+  cipi-cli aliases remove myapp www.example.com -y`,
+	Example: `  cipi-cli aliases remove myapp www.example.com
+  cipi-cli aliases remove myapp www.example.com -y`,
+	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
 		if !yes {

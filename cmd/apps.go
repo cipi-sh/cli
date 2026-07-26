@@ -16,11 +16,33 @@ var appsCmd = &cobra.Command{
 	Use:     "apps",
 	Aliases: []string{"app"},
 	Short:   "Manage applications",
+	Long: `List, create, edit, suspend, and inspect applications on the selected server.
+
+  cipi-cli apps list
+  cipi-cli apps show myapp
+  cipi-cli apps create
+  cipi-cli apps logs myapp --type laravel
+
+For deploys use 'cipi-cli deploy <app>'. For SSL use 'cipi-cli ssl install <app>'.
+
+` + multiServerTip,
+	Example: `  cipi-cli apps list
+  cipi-cli prod apps list
+  cipi-cli apps show myapp
+  cipi-cli apps create --user myapp --domain example.com --php 8.4
+  cipi-cli apps logs myapp --type laravel`,
 }
 
 var appsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all applications",
+	Long: `List applications on the active/default server.
+
+  cipi-cli apps list
+  cipi-cli prod apps list`,
+	Example: `  cipi-cli apps list
+  cipi-cli staging apps list
+  cipi-cli apps list --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -66,9 +88,16 @@ var appsListCmd = &cobra.Command{
 }
 
 var appsShowCmd = &cobra.Command{
-	Use:   "show [name]",
+	Use:   "show <name>",
 	Short: "Show application details",
-	Args:  cobra.ExactArgs(1),
+	Long: `Show domain, PHP version, repository, branch, aliases, and other details
+for one application.
+
+  cipi-cli apps show myapp
+  cipi-cli prod apps show myapp`,
+	Example: `  cipi-cli apps show myapp
+  cipi-cli staging apps show myapp`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -119,6 +148,18 @@ var appsShowCmd = &cobra.Command{
 var appsCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new application",
+	Long: `Create a new application on the selected server.
+
+Interactive prompts fill missing flags. Use --custom for non-Laravel apps
+(SFTP / custom docroot).
+
+  cipi-cli apps create
+  cipi-cli apps create --user myapp --domain example.com --php 8.4 \
+    --repository git@github.com:org/repo.git --branch main`,
+	Example: `  cipi-cli apps create
+  cipi-cli apps create --user myapp --domain example.com --php 8.4 \
+    --repository git@github.com:org/repo.git --branch main
+  cipi-cli apps create --user static --domain site.com --php 8.4 --custom --docroot public`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -187,9 +228,18 @@ var appsCreateCmd = &cobra.Command{
 }
 
 var appsEditCmd = &cobra.Command{
-	Use:   "edit [name]",
+	Use:   "edit <name>",
 	Short: "Edit an existing application",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update PHP version, repository, branch, and/or primary domain.
+
+Pass at least one flag: --php, --repository, --branch, or --domain.
+
+  cipi-cli apps edit myapp --php 8.4
+  cipi-cli apps edit myapp --branch develop --domain new.example.com`,
+	Example: `  cipi-cli apps edit myapp --php 8.4
+  cipi-cli apps edit myapp --repository git@github.com:org/repo.git --branch main
+  cipi-cli apps edit myapp --domain new.example.com`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -230,9 +280,17 @@ var appsEditCmd = &cobra.Command{
 }
 
 var appsDeleteCmd = &cobra.Command{
-	Use:   "delete [name]",
-	Short: "Delete an application",
-	Args:  cobra.ExactArgs(1),
+	Use:   "delete <name>",
+	Short: "Delete an application permanently",
+	Long: `Delete an application and its site from the server. This cannot be undone.
+
+Prompts for confirmation unless -y / --yes is passed.
+
+  cipi-cli apps delete myapp
+  cipi-cli apps delete myapp -y`,
+	Example: `  cipi-cli apps delete myapp
+  cipi-cli apps delete myapp -y`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
 		if !yes {
@@ -261,9 +319,17 @@ var appsDeleteCmd = &cobra.Command{
 }
 
 var appsSuspendCmd = &cobra.Command{
-	Use:   "suspend [name]",
-	Short: "Suspend an application (serve an HTTP 503 page)",
-	Args:  cobra.ExactArgs(1),
+	Use:   "suspend <name>",
+	Short: "Suspend an application (HTTP 503 maintenance page)",
+	Long: `Suspend an application so visitors see an HTTP 503 page.
+
+Use 'cipi-cli apps unsuspend <name>' to bring it back online.
+
+  cipi-cli apps suspend myapp
+  cipi-cli prod apps suspend myapp`,
+	Example: `  cipi-cli apps suspend myapp
+  cipi-cli staging apps suspend myapp`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -284,10 +350,20 @@ var appsSuspendCmd = &cobra.Command{
 }
 
 var appsLogsCmd = &cobra.Command{
-	Use:   "logs [name]",
+	Use:   "logs <name>",
 	Short: "Read application logs",
-	Long:  "Read paginated log snapshots (nginx, PHP-FPM, Laravel, worker, deploy). Page 1 returns the most recent lines.",
-	Args:  cobra.ExactArgs(1),
+	Long: `Read paginated log snapshots for an application.
+
+Types: all, nginx, php, worker, deploy, laravel.
+Page 1 returns the most recent lines.
+
+  cipi-cli apps logs myapp
+  cipi-cli apps logs myapp --type laravel --page 1 --per-page 100`,
+	Example: `  cipi-cli apps logs myapp
+  cipi-cli apps logs myapp --type nginx
+  cipi-cli apps logs myapp -t laravel -p 2 --per-page 100
+  cipi-cli prod apps logs myapp --type deploy`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logType, _ := cmd.Flags().GetString("type")
 		page, _ := cmd.Flags().GetInt("page")
@@ -344,9 +420,15 @@ var appsLogsCmd = &cobra.Command{
 }
 
 var appsUnsuspendCmd = &cobra.Command{
-	Use:   "unsuspend [name]",
+	Use:   "unsuspend <name>",
 	Short: "Unsuspend an application (bring it back online)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Remove the maintenance/503 page and bring the application back online.
+
+  cipi-cli apps unsuspend myapp
+  cipi-cli prod apps unsuspend myapp`,
+	Example: `  cipi-cli apps unsuspend myapp
+  cipi-cli staging apps unsuspend myapp`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {

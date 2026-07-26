@@ -228,10 +228,16 @@ func init() {
 Quick setup (recommended):
   cipi-cli completion install
 
-Or print a script for a specific shell:
+Or print a script for a specific shell (pipe into your rc file yourself):
   cipi-cli completion zsh
   cipi-cli completion bash
-  cipi-cli completion fish`
+  cipi-cli completion fish
+
+Supported shells: zsh, bash, fish.`
+			c.Example = `  cipi-cli completion install
+  cipi-cli completion install --shell zsh
+  cipi-cli completion zsh
+  cipi-cli completion bash`
 			break
 		}
 	}

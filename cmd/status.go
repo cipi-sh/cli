@@ -67,17 +67,20 @@ type profileStatusResult struct {
 
 var statusCmd = &cobra.Command{
 	Use:   "status [profile]",
-	Short: "Show global server status, or details for one profile",
+	Short: "Show server status (all profiles, or one in detail)",
 	Long: `Show server status from GET /api/status (same data as "cipi status" on the host).
 
 Requires the status-view ability on the API token.
 
   cipi-cli status              global overview — one row per profile
   cipi-cli status prod         full details for one server
-  cipi-cli prod status         same, via profile prefix`,
+  cipi-cli prod status         same, via profile prefix
+
+` + multiServerTip,
 	Example: `  cipi-cli status
   cipi-cli status prod
-  cipi-cli staging status`,
+  cipi-cli staging status
+  cipi-cli status --json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bare "status" / "status all" → global overview table.

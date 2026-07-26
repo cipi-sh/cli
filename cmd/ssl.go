@@ -11,12 +11,31 @@ import (
 var sslCmd = &cobra.Command{
 	Use:   "ssl",
 	Short: "Manage SSL certificates",
+	Long: `Install and manage Let's Encrypt SSL certificates for applications.
+
+  cipi-cli ssl install myapp
+  cipi-cli prod ssl install myapp
+
+DNS for the app domain (and aliases) must already point to the server.
+
+` + multiServerTip,
+	Example: `  cipi-cli ssl install myapp
+  cipi-cli prod ssl install myapp`,
 }
 
 var sslInstallCmd = &cobra.Command{
-	Use:   "install [app]",
+	Use:   "install <app>",
 	Short: "Install a Let's Encrypt SSL certificate",
-	Args:  cobra.ExactArgs(1),
+	Long: `Request and install a Let's Encrypt certificate for the application's
+primary domain and aliases.
+
+Waits for the async job to finish before returning.
+
+  cipi-cli ssl install myapp
+  cipi-cli staging ssl install myapp`,
+	Example: `  cipi-cli ssl install myapp
+  cipi-cli prod ssl install myapp`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {

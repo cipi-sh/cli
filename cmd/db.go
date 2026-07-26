@@ -12,11 +12,35 @@ var dbCmd = &cobra.Command{
 	Use:     "db",
 	Aliases: []string{"database", "dbs"},
 	Short:   "Manage databases",
+	Long: `Create, backup, restore, and manage MySQL databases on the selected server.
+
+  cipi-cli db list
+  cipi-cli db create mydb
+  cipi-cli db backup mydb
+  cipi-cli db restore mydb
+  cipi-cli db password mydb
+  cipi-cli db delete mydb
+
+` + multiServerTip,
+	Example: `  cipi-cli db list
+  cipi-cli prod db list
+  cipi-cli db create mydb
+  cipi-cli db backup mydb
+  cipi-cli db restore mydb -y
+  cipi-cli db password mydb -y
+  cipi-cli db delete mydb -y`,
 }
 
 var dbListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all databases",
+	Long: `List databases on the active/default server with approximate size.
+
+  cipi-cli db list
+  cipi-cli prod db list`,
+	Example: `  cipi-cli db list
+  cipi-cli staging db list
+  cipi-cli db list --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -59,9 +83,15 @@ var dbListCmd = &cobra.Command{
 }
 
 var dbCreateCmd = &cobra.Command{
-	Use:   "create [name]",
+	Use:   "create <name>",
 	Short: "Create a new database",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a new MySQL database on the selected server.
+
+  cipi-cli db create mydb
+  cipi-cli prod db create mydb`,
+	Example: `  cipi-cli db create mydb
+  cipi-cli staging db create client_a`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -86,9 +116,18 @@ var dbCreateCmd = &cobra.Command{
 }
 
 var dbDeleteCmd = &cobra.Command{
-	Use:   "delete [name]",
+	Use:   "delete <name>",
 	Short: "Delete a database permanently",
-	Args:  cobra.ExactArgs(1),
+	Long: `Permanently delete a database. This cannot be undone.
+
+Prompts for confirmation unless -y / --yes is passed.
+Consider 'cipi-cli db backup <name>' first.
+
+  cipi-cli db delete mydb
+  cipi-cli db delete mydb -y`,
+	Example: `  cipi-cli db delete mydb
+  cipi-cli db delete mydb -y`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
 		if !yes {
@@ -117,9 +156,15 @@ var dbDeleteCmd = &cobra.Command{
 }
 
 var dbBackupCmd = &cobra.Command{
-	Use:   "backup [name]",
+	Use:   "backup <name>",
 	Short: "Create a compressed backup of a database",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a compressed backup of a database on the server.
+
+  cipi-cli db backup mydb
+  cipi-cli prod db backup mydb`,
+	Example: `  cipi-cli db backup mydb
+  cipi-cli staging db backup mydb`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -140,9 +185,17 @@ var dbBackupCmd = &cobra.Command{
 }
 
 var dbRestoreCmd = &cobra.Command{
-	Use:   "restore [name]",
+	Use:   "restore <name>",
 	Short: "Restore a database from backup",
-	Args:  cobra.ExactArgs(1),
+	Long: `Restore a database from its latest backup on the server.
+
+Overwrites current data. Prompts for confirmation unless -y / --yes.
+
+  cipi-cli db restore mydb
+  cipi-cli db restore mydb -y`,
+	Example: `  cipi-cli db restore mydb
+  cipi-cli db restore mydb -y`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
 		if !yes {
@@ -171,9 +224,17 @@ var dbRestoreCmd = &cobra.Command{
 }
 
 var dbPasswordCmd = &cobra.Command{
-	Use:   "password [name]",
+	Use:   "password <name>",
 	Short: "Regenerate database password and update .env",
-	Args:  cobra.ExactArgs(1),
+	Long: `Regenerate the database password and update the linked application's .env.
+
+Prompts for confirmation unless -y / --yes is passed.
+
+  cipi-cli db password mydb
+  cipi-cli db password mydb -y`,
+	Example: `  cipi-cli db password mydb
+  cipi-cli db password mydb -y`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
 		if !yes {

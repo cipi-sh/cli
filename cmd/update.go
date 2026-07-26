@@ -45,7 +45,13 @@ var updateCmd = &cobra.Command{
 	Long: `Download and install the newest cipi-cli release from GitHub.
 
 Picks the highest semver among published releases (not GitHub's "latest"
-flag, which can point at an older tag). Refuses to downgrade unless --force.`,
+flag, which can point at an older tag). Refuses to downgrade unless --force.
+
+  cipi-cli update
+  cipi-cli update --force`,
+	Example: `  cipi-cli update
+  cipi-cli self-update
+  cipi-cli update --force`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		force, _ := cmd.Flags().GetBool("force")
 

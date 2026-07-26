@@ -15,12 +15,23 @@ Create a token on the Cipi server with:
 Then store it in this CLI under a named profile:
   cipi-cli api token add prod
 
-Each profile is one server (endpoint + token).`,
+Each profile is one server (endpoint + token). Same as:
+  cipi-cli configure --profile prod
+  cipi-cli profiles add prod`,
+	Example: `  cipi-cli api token add prod
+  cipi-cli api token add staging --endpoint https://api.example.com --token "1|..."`,
 }
 
 var apiTokenCmd = &cobra.Command{
 	Use:   "token",
 	Short: "Manage API tokens stored in local profiles",
+	Long: `Store and update API tokens for named server profiles.
+
+Create the token on the server first:
+  cipi api token create
+
+Then add it locally:
+  cipi-cli api token add prod`,
 }
 
 var apiTokenAddCmd = &cobra.Command{
@@ -33,7 +44,9 @@ If omitted interactively, you will be prompted — it will not silently
 overwrite the "default" profile.
 
 Create the token on the server first:
-  cipi api token create`,
+  cipi api token create
+
+Same as 'cipi-cli configure --profile <name>' and 'cipi-cli profiles add <name>'.`,
 	Example: `  # Add token for server profile "prod"
   cipi-cli api token add prod
 

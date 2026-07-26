@@ -26,6 +26,16 @@ var domainsCmd = &cobra.Command{
 	Use:     "domains",
 	Aliases: []string{"domain"},
 	Short:   "List all domains and aliases across every app",
+	Long: `List every primary domain and alias on the selected server, with app,
+type (Laravel/Custom), PHP, docroot, branch, and suspended state.
+
+Useful for a quick inventory. To manage aliases on one app, use:
+  cipi-cli aliases list|add|remove <app> ...
+
+` + multiServerTip,
+	Example: `  cipi-cli domains
+  cipi-cli prod domains
+  cipi-cli domains --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {

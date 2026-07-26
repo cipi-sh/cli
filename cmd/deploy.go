@@ -9,9 +9,25 @@ import (
 )
 
 var deployCmd = &cobra.Command{
-	Use:   "deploy [app]",
+	Use:   "deploy <app>",
 	Short: "Deploy an application",
-	Args:  cobra.ExactArgs(1),
+	Long: `Trigger a deployment for an application (pull + release).
+
+Waits for the async job to finish before returning.
+
+  cipi-cli deploy myapp
+  cipi-cli prod deploy myapp
+
+Subcommands:
+  cipi-cli deploy rollback myapp   previous release
+  cipi-cli deploy unlock myapp     clear a stuck deploy lock
+
+` + multiServerTip,
+	Example: `  cipi-cli deploy myapp
+  cipi-cli prod deploy myapp
+  cipi-cli deploy rollback myapp
+  cipi-cli deploy unlock myapp`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -32,9 +48,17 @@ var deployCmd = &cobra.Command{
 }
 
 var deployRollbackCmd = &cobra.Command{
-	Use:   "rollback [app]",
+	Use:   "rollback <app>",
 	Short: "Rollback to the previous release",
-	Args:  cobra.ExactArgs(1),
+	Long: `Roll back an application to the previous release.
+
+Prompts for confirmation unless -y / --yes is passed.
+
+  cipi-cli deploy rollback myapp
+  cipi-cli deploy rollback myapp -y`,
+	Example: `  cipi-cli deploy rollback myapp
+  cipi-cli prod deploy rollback myapp -y`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
 		if !yes {
@@ -63,9 +87,18 @@ var deployRollbackCmd = &cobra.Command{
 }
 
 var deployUnlockCmd = &cobra.Command{
-	Use:   "unlock [app]",
+	Use:   "unlock <app>",
 	Short: "Unlock a stuck deployment",
-	Args:  cobra.ExactArgs(1),
+	Long: `Clear a stuck deploy lock so a new deployment can run.
+
+Use when a previous deploy crashed or was interrupted and left the
+application locked.
+
+  cipi-cli deploy unlock myapp
+  cipi-cli prod deploy unlock myapp`,
+	Example: `  cipi-cli deploy unlock myapp
+  cipi-cli staging deploy unlock myapp`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {

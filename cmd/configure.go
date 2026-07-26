@@ -9,37 +9,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const profilesHelp = `A profile is one Cipi server (API endpoint + token).
-
-Add a server:
-  cipi-cli configure --profile prod
-  cipi-cli profiles add staging
-
-List servers:
-  cipi-cli profiles
-
-Set the default server (used when you omit the profile prefix):
-  cipi-cli profiles use prod
-
-Run a command against a server:
-  cipi-cli prod apps list          # explicit profile
-  cipi-cli apps list               # uses the default profile
-
-Config file: ~/.cipi/config.json`
-
 var configureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Add or update a server profile (endpoint + token)",
 	Long: `Add or update a server profile.
 
 Each profile maps to one Cipi server. Use a distinct name per server
-(e.g. prod, staging, client-a).
+(e.g. prod, staging, client-a). Same as 'cipi-cli profiles add' and
+'cipi-cli api token add'.
 
 ` + profilesHelp,
 	Example: `  # Interactive setup for a server named "prod"
   cipi-cli configure --profile prod
 
-  # Same via api token add
+  # Same via profiles / api token
+  cipi-cli profiles add prod
   cipi-cli api token add prod
 
   # Non-interactive
@@ -58,8 +42,12 @@ Each profile maps to one Cipi server. Use a distinct name per server
 var configureShowCmd = &cobra.Command{
 	Use:   "show [profile]",
 	Short: "Show configuration for one or all profiles",
-	Long:  "Alias of 'cipi-cli profiles show'. Prefer the profiles command.",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Alias of 'cipi-cli profiles show'. Prefer the profiles command.
+
+  cipi-cli configure show
+  cipi-cli configure show prod
+  cipi-cli profiles show prod`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
 			return showProfile(args[0])
@@ -71,7 +59,11 @@ var configureShowCmd = &cobra.Command{
 var configureListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured server profiles",
-	Long:  "Alias of 'cipi-cli profiles'. Prefer the profiles command.",
+	Long: `Alias of 'cipi-cli profiles'. Prefer the profiles command.
+
+  cipi-cli configure list
+  cipi-cli profiles
+  cipi-cli servers`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return listProfiles()
 	},
@@ -80,8 +72,11 @@ var configureListCmd = &cobra.Command{
 var configureDeleteCmd = &cobra.Command{
 	Use:   "delete <profile>",
 	Short: "Delete a server profile",
-	Long:  "Alias of 'cipi-cli profiles delete'. Prefer the profiles command.",
-	Args:  cobra.ExactArgs(1),
+	Long: `Alias of 'cipi-cli profiles delete'. Prefer the profiles command.
+
+  cipi-cli configure delete staging
+  cipi-cli profiles delete staging -y`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
 		return deleteProfile(args[0], yes)
@@ -91,8 +86,12 @@ var configureDeleteCmd = &cobra.Command{
 var configureDefaultCmd = &cobra.Command{
 	Use:   "default <profile>",
 	Short: "Set the default server profile",
-	Long:  "Alias of 'cipi-cli profiles use'. Prefer the profiles command.",
-	Args:  cobra.ExactArgs(1),
+	Long: `Alias of 'cipi-cli profiles use'. Prefer the profiles command.
+
+  cipi-cli configure default prod
+  cipi-cli profiles use prod
+  cipi-cli servers use staging`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return setDefaultProfile(args[0])
 	},
@@ -239,9 +238,10 @@ func listProfiles() error {
 	table.Flush()
 
 	output.Dim.Println("  Usage:")
-	output.Dim.Println("    cipi-cli <profile> <command>     target a server for one command")
-	output.Dim.Println("    cipi-cli profiles use <profile>  set the default server")
-	output.Dim.Println("    cipi-cli profiles add <name>     add another server")
+	output.Dim.Println("    cipi-cli <profile> <command>        target a server for one command")
+	output.Dim.Println("    cipi-cli profiles use <profile>     set the default server")
+	output.Dim.Println("    cipi-cli profiles add <name>        add another server")
+	output.Dim.Println("    cipi-cli profiles delete <profile>  remove a server profile")
 	fmt.Println()
 	return nil
 }

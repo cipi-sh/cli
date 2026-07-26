@@ -7,7 +7,7 @@ import (
 var profilesCmd = &cobra.Command{
 	Use:     "profiles",
 	Aliases: []string{"profile", "servers", "server"},
-	Short:   "Manage server profiles (multi-server)",
+	Short:   "Manage server profiles (one profile = one server)",
 	Long: `Manage connections to one or more Cipi servers.
 
 ` + profilesHelp,
@@ -34,12 +34,16 @@ var profilesCmd = &cobra.Command{
 var profilesAddCmd = &cobra.Command{
 	Use:   "add [name]",
 	Short: "Add or update a server profile",
-	Long: `Add or update a server profile (same as 'cipi-cli configure --profile <name>').
+	Long: `Add or update a server profile (same as 'cipi-cli configure --profile <name>'
+and 'cipi-cli api token add <name>').
 
-You will be prompted for the API endpoint and token unless you pass flags.`,
+You will be prompted for the API endpoint and token unless you pass flags.
+If the name is omitted, you will be asked — it will not silently write to "default".`,
 	Example: `  cipi-cli profiles add prod
   cipi-cli profiles add staging --endpoint https://api.example.com --token "1|..."
-  cipi-cli servers add client-a`,
+  cipi-cli servers add client-a
+  cipi-cli configure --profile prod
+  cipi-cli api token add prod`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profile := ""
@@ -55,8 +59,13 @@ You will be prompted for the API endpoint and token unless you pass flags.`,
 var profilesShowCmd = &cobra.Command{
 	Use:   "show [profile]",
 	Short: "Show details for one or all server profiles",
-	Example: `  cipi-cli profiles show
+	Long: `Show endpoint (and masked token info) for one profile, or all profiles.
+
+  cipi-cli profiles show
   cipi-cli profiles show prod`,
+	Example: `  cipi-cli profiles show
+  cipi-cli profiles show prod
+  cipi-cli servers show staging`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
@@ -69,6 +78,12 @@ var profilesShowCmd = &cobra.Command{
 var profilesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured server profiles",
+	Long: `List all configured servers (same as bare 'cipi-cli profiles').
+
+Shows profile name, endpoint, and which one is the default.`,
+	Example: `  cipi-cli profiles list
+  cipi-cli profiles
+  cipi-cli servers`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return listProfiles()
 	},
@@ -77,8 +92,16 @@ var profilesListCmd = &cobra.Command{
 var profilesDeleteCmd = &cobra.Command{
 	Use:   "delete <profile>",
 	Short: "Delete a server profile",
+	Long: `Remove a server profile from the local config (~/.cipi/config.json).
+
+Does not change anything on the remote Cipi server — only deletes local
+credentials for that profile name.
+
+If you delete the default profile, another remaining profile becomes default
+when only one is left.`,
 	Example: `  cipi-cli profiles delete staging
-  cipi-cli profiles delete staging -y`,
+  cipi-cli profiles delete staging -y
+  cipi-cli servers delete old-prod`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")

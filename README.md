@@ -1,6 +1,6 @@
 # cipi-cli
 
-Command-line interface for [Cipi](https://cipi.sh) — manage your servers, apps, databases, SSL certificates, and deployments from the terminal.
+Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, and deployments from the terminal.
 
 ## Installation
 
@@ -29,7 +29,14 @@ sudo mv cipi-cli-* /usr/local/bin/cipi-cli
 A **profile** is a named connection to a Cipi server (API endpoint + token).  
 Use as many profiles as you have servers. The alias `servers` works like `profiles`.
 
+```bash
+cipi-cli prod apps list          # explicit profile
+cipi-cli apps list               # uses the default profile
+```
+
 ### 1. Add servers
+
+Create a token on the Cipi host first (`cipi api token create`), then store it locally under a profile name:
 
 ```bash
 cipi-cli api token add prod
@@ -42,10 +49,10 @@ You will be prompted for:
 
 - **Profile name** — alias for this server (e.g. `prod`, `staging`) if you omit it
 - **API endpoint** — the URL of your Cipi API (e.g. `https://api.example.com`)
-- **Token** — a Sanctum token created with `cipi api token create` on your server
+- **Token** — the Sanctum token from the server
 
 Credentials are stored per profile in `~/.cipi/config.json` (permissions `0600`).  
-Omitting the profile name no longer writes silently to `default` — you will be asked.
+Omitting the profile name does **not** write silently to `default` — you will be asked.
 
 Non-interactive:
 
@@ -53,14 +60,17 @@ Non-interactive:
 cipi-cli api token add prod --endpoint https://api.example.com --token "1|yourtoken..."
 cipi-cli profiles add staging --endpoint https://staging.example.com --token "1|yourtoken..."
 ```
+
 ### 2. Manage servers
 
 ```bash
 cipi-cli profiles                 # list servers (alias: cipi-cli servers)
 cipi-cli profiles show prod       # inspect one server
 cipi-cli profiles use prod        # set default server
-cipi-cli profiles delete staging  # remove a server profile
+cipi-cli profiles delete staging  # remove a local server profile (-y to skip confirm)
 ```
+
+Deleting a profile only removes local credentials — nothing changes on the remote server.
 
 ### 3. Run commands
 
@@ -71,12 +81,23 @@ cipi-cli prod apps list
 cipi-cli staging apps show myapp
 cipi-cli prod deploy myapp
 cipi-cli prod ssl install myapp
+cipi-cli status                   # overview of all profiles
+cipi-cli status prod              # details for one server
 ```
 
 After `cipi-cli profiles use prod`, you can omit the prefix:
 
 ```bash
 cipi-cli apps list                # uses the default profile (prod)
+```
+
+Every command has detailed help:
+
+```bash
+cipi-cli --help
+cipi-cli profiles --help
+cipi-cli apps --help
+cipi-cli deploy --help
 ```
 
 ## Commands
@@ -94,17 +115,22 @@ cipi-cli apps unsuspend <name>              Bring a suspended application back o
 cipi-cli apps logs <name> [flags]           Read application logs
 ```
 
+Alias: `app` → `apps`.
+
 **Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`
 
 **Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+)
 
-**Logs flags:** `--type` (default `all`), `--page` (default `1`), `--per-page` (default `50`, max `1000`; requires API 1.11.9+)
+**Logs flags:** `--type` (default `all`: nginx, php, worker, deploy, laravel), `--page` (default `1` = most recent), `--per-page` (default `50`, max `1000`; requires API 1.11.9+)
 
 ### Domains
 
 ```
 cipi-cli domains                            List every domain and alias across all apps
 ```
+
+Alias: `domain` → `domains`.  
+For managing aliases on one app, see **Aliases** below.
 
 ### Deploy
 
@@ -120,6 +146,8 @@ cipi-cli deploy unlock <app>                Unlock a stuck deployment
 cipi-cli ssl install <app>                  Install Let's Encrypt certificate
 ```
 
+DNS for the app domain (and aliases) must already point to the server.
+
 ### Aliases
 
 ```
@@ -127,6 +155,8 @@ cipi-cli aliases list <app>                 List aliases
 cipi-cli aliases add <app> <domain>         Add an alias
 cipi-cli aliases remove <app> <domain> [-y] Remove an alias
 ```
+
+Alias: `alias` → `aliases`.
 
 ### Databases
 
@@ -136,8 +166,10 @@ cipi-cli db create <name>                   Create a database
 cipi-cli db delete <name> [-y]              Delete a database
 cipi-cli db backup <name>                   Create a backup
 cipi-cli db restore <name> [-y]             Restore from backup
-cipi-cli db password <name> [-y]            Regenerate password
+cipi-cli db password <name> [-y]            Regenerate password and update .env
 ```
+
+Aliases: `database`, `dbs` → `db`.
 
 ### Status
 
@@ -157,36 +189,47 @@ cipi-cli jobs show <id>                     Show job status
 cipi-cli jobs wait <id>                     Wait for a job to complete
 ```
 
+Alias: `job` → `jobs`.  
+Most write commands wait for jobs automatically; use these to inspect a job by ID.
+
 ### Configuration & servers (profiles)
 
 ```
 cipi-cli api token add [profile]            Add/update API token for a named profile
 cipi-cli configure [--profile NAME]         Add/update a server profile (endpoint + token)
 cipi-cli profiles                           List configured servers
+cipi-cli profiles list                      Same as bare profiles
 cipi-cli profiles add [name]                Add/update a server profile
-cipi-cli profiles list                      List configured servers
 cipi-cli profiles show [profile]            Show one or all server profiles
 cipi-cli profiles use <profile>             Set the default server (alias: default)
-cipi-cli profiles delete <profile> [-y]     Delete a server profile
+cipi-cli profiles delete <profile> [-y]     Delete a local server profile
 ```
 
-Aliases: `servers` / `server` → `profiles`; `profiles use` → `profiles default`.  
-Always pass a profile name (`prod`, `staging`, …) — otherwise the CLI prompts for one.
+Aliases:
+
+- `servers` / `server` → `profiles`
+- `profiles use` → `profiles default`
+- `configure list|show|delete|default` → prefer the `profiles` equivalents
+
+Always pass a profile name (`prod`, `staging`, …) when adding credentials — otherwise the CLI prompts for one.
 
 ### Update
 
 ```
 cipi-cli update                             Update the CLI to the latest release
-cipi-cli update --force                     Reinstall even if already up to date
+cipi-cli update --force                     Reinstall even if already up to date (allows downgrade)
 ```
 
-Downloads the matching binary from the latest [GitHub Release](https://github.com/cipi-sh/cli/releases), verifies its SHA-256 checksum, and replaces the running binary in place. If it is installed in a system path (e.g. `/usr/local/bin`), run it with `sudo cipi-cli update`.
+Aliases: `self-update`, `upgrade`.
+
+Downloads the matching binary from GitHub Releases (highest semver, not GitHub’s “latest” flag), verifies its SHA-256 checksum, and replaces the running binary in place. If installed in a system path (e.g. `/usr/local/bin`), run `sudo cipi-cli update`.
 
 ### Shell completion
 
 ```
 cipi-cli completion install                 Auto-detect shell and install completion
 cipi-cli completion install --shell zsh     Install for a specific shell (zsh|bash|fish)
+cipi-cli completion zsh                     Print script only (same for bash / fish)
 ```
 
 Writes the script under `~/.cipi/completions/` (or fish’s completions dir) and, for zsh/bash, appends a source line to your rc file. Reload the shell afterwards.
@@ -194,8 +237,9 @@ Writes the script under `~/.cipi/completions/` (or fish’s completions dir) and
 ### Other
 
 ```
-cipi-cli version                            Print version
-cipi-cli --help                             Help
+cipi-cli version                            Print version and build time
+cipi-cli --help                             Root help
+cipi-cli <command> --help                   Command help
 ```
 
 ## Global flags
@@ -207,7 +251,7 @@ cipi-cli --help                             Help
 
 ## Async operations
 
-Write operations (create, edit, delete, deploy, SSL, etc.) are asynchronous on the Cipi API. The CLI automatically polls for job completion and displays a spinner while waiting. If you prefer to handle polling manually, use `cipi-cli jobs show <id>`.
+Write operations (create, edit, delete, deploy, SSL, etc.) are asynchronous on the Cipi API. The CLI automatically polls for job completion and displays a spinner while waiting. If you prefer to handle polling manually, use `cipi-cli jobs show <id>` or `cipi-cli jobs wait <id>`.
 
 ## Releases
 
