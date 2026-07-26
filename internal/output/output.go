@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/fatih/color"
 )
+
+// ansiEscape matches CSI / OSC sequences used by terminal colors.
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 
 var (
 	Bold      = color.New(color.Bold)
@@ -71,12 +75,12 @@ func (t *Table) Row(values ...string) {
 func (t *Table) Flush() {
 	colWidths := make([]int, len(t.headers))
 	for i, h := range t.headers {
-		colWidths[i] = utf8.RuneCountInString(h)
+		colWidths[i] = visibleWidth(h)
 	}
 	for _, row := range t.rows {
 		for i, v := range row {
 			if i < len(colWidths) {
-				if w := utf8.RuneCountInString(v); w > colWidths[i] {
+				if w := visibleWidth(v); w > colWidths[i] {
 					colWidths[i] = w
 				}
 			}
@@ -93,7 +97,7 @@ func (t *Table) Flush() {
 
 	sep := make([]string, len(t.headers))
 	for i, h := range t.headers {
-		sep[i] = Dim.Sprint(padRight(strings.Repeat("─", utf8.RuneCountInString(h)), colWidths[i]))
+		sep[i] = Dim.Sprint(padRight(strings.Repeat("─", visibleWidth(h)), colWidths[i]))
 	}
 	fmt.Printf("  %s\n", strings.Join(sep, gap))
 
@@ -111,8 +115,16 @@ func (t *Table) Flush() {
 	fmt.Println()
 }
 
+func stripANSI(s string) string {
+	return ansiEscape.ReplaceAllString(s, "")
+}
+
+func visibleWidth(s string) int {
+	return utf8.RuneCountInString(stripANSI(s))
+}
+
 func padRight(s string, width int) string {
-	n := utf8.RuneCountInString(s)
+	n := visibleWidth(s)
 	if n >= width {
 		return s
 	}
