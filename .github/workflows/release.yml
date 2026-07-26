@@ -3,8 +3,8 @@ name: Release
 on:
   push:
     tags:
+      # Only v-prefixed tags create releases (avoids stale tags like 1.0.8 becoming Latest).
       - "v*"
-      - "*.*.*"
   workflow_dispatch:
     inputs:
       tag:
@@ -54,7 +54,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.VERSION }}
           generate_release_notes: true
+          make_latest: true
           files: |
             dist/cipi-cli-linux-amd64
             dist/cipi-cli-linux-arm64

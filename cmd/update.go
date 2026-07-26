@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,8 +20,9 @@ import (
 )
 
 const (
-	githubRepo  = "cipi-sh/cli"
-	releasesAPI = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
+	githubRepo   = "cipi-sh/cli"
+	releasesAPI  = "https://api.github.com/repos/" + githubRepo + "/releases"
+	releasesPage = releasesAPI + "?per_page=100"
 )
 
 type ghAsset struct {
@@ -29,15 +31,21 @@ type ghAsset struct {
 }
 
 type ghRelease struct {
-	TagName string    `json:"tag_name"`
-	HTMLURL string    `json:"html_url"`
-	Assets  []ghAsset `json:"assets"`
+	TagName    string    `json:"tag_name"`
+	HTMLURL    string    `json:"html_url"`
+	Draft      bool      `json:"draft"`
+	Prerelease bool      `json:"prerelease"`
+	Assets     []ghAsset `json:"assets"`
 }
 
 var updateCmd = &cobra.Command{
 	Use:     "update",
 	Aliases: []string{"self-update", "upgrade"},
 	Short:   "Update the CLI to the latest release",
+	Long: `Download and install the newest cipi-cli release from GitHub.
+
+Picks the highest semver among published releases (not GitHub's "latest"
+flag, which can point at an older tag). Refuses to downgrade unless --force.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		force, _ := cmd.Flags().GetBool("force")
 
@@ -54,10 +62,19 @@ var updateCmd = &cobra.Command{
 			return fmt.Errorf("empty tag_name in release response")
 		}
 
-		if !force && sameVersion(Version, latest) {
-			output.Success("Already up to date (%s)", Version)
-			fmt.Println()
-			return nil
+		cmp := compareVersions(Version, latest)
+		if !force {
+			if cmp == 0 {
+				output.Success("Already up to date (%s)", displayVersion(Version))
+				fmt.Println()
+				return nil
+			}
+			if cmp > 0 {
+				output.Warn("Installed %s is newer than latest release %s — skipping", displayVersion(Version), latest)
+				output.Info("Use --force to install %s anyway", latest)
+				fmt.Println()
+				return nil
+			}
 		}
 
 		assetName := fmt.Sprintf("cipi-cli-%s-%s", runtime.GOOS, runtime.GOARCH)
@@ -109,7 +126,7 @@ var updateCmd = &cobra.Command{
 			return err
 		}
 
-		output.Success("Updated %s → %s", Version, latest)
+		output.Success("Updated %s → %s", displayVersion(Version), latest)
 		output.Dim.Printf("  Installed at %s\n\n", exePath)
 		return nil
 	},
@@ -117,7 +134,7 @@ var updateCmd = &cobra.Command{
 
 func fetchLatestRelease() (*ghRelease, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest("GET", releasesAPI, nil)
+	req, err := http.NewRequest("GET", releasesPage, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -138,11 +155,28 @@ func fetchLatestRelease() (*ghRelease, error) {
 		return nil, fmt.Errorf("GitHub API returned HTTP %d", resp.StatusCode)
 	}
 
-	var release ghRelease
-	if err := json.Unmarshal(body, &release); err != nil {
+	var releases []ghRelease
+	if err := json.Unmarshal(body, &releases); err != nil {
 		return nil, fmt.Errorf("parsing release response: %w", err)
 	}
-	return &release, nil
+
+	var best *ghRelease
+	for i := range releases {
+		r := &releases[i]
+		if r.Draft || r.Prerelease || r.TagName == "" {
+			continue
+		}
+		if parseVersion(r.TagName) == nil {
+			continue
+		}
+		if best == nil || compareVersions(r.TagName, best.TagName) > 0 {
+			best = r
+		}
+	}
+	if best == nil {
+		return nil, fmt.Errorf("no published semver releases found")
+	}
+	return best, nil
 }
 
 func findAsset(assets []ghAsset, name string) string {
@@ -236,19 +270,81 @@ func replaceBinary(exePath string, data []byte) error {
 	return os.Rename(tmpName, exePath)
 }
 
-// sameVersion reports whether the running build matches the latest tag,
-// tolerating a missing "v" prefix on either side.
-func sameVersion(current, latest string) bool {
-	norm := func(s string) string {
-		return strings.TrimPrefix(strings.TrimSpace(s), "v")
+func displayVersion(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "dev"
 	}
-	if current == "" || current == "dev" {
-		return false
+	return v
+}
+
+type semver struct {
+	major, minor, patch int
+}
+
+func parseVersion(v string) *semver {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	if v == "" || v == "dev" {
+		return nil
 	}
-	return norm(current) == norm(latest)
+	// Strip pre-release / build metadata: 1.2.3-rc.1+meta → 1.2.3
+	if i := strings.IndexAny(v, "-+"); i >= 0 {
+		v = v[:i]
+	}
+	parts := strings.Split(v, ".")
+	if len(parts) < 2 || len(parts) > 3 {
+		return nil
+	}
+	major, err1 := strconv.Atoi(parts[0])
+	minor, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || major < 0 || minor < 0 {
+		return nil
+	}
+	patch := 0
+	if len(parts) == 3 {
+		p, err := strconv.Atoi(parts[2])
+		if err != nil || p < 0 {
+			return nil
+		}
+		patch = p
+	}
+	return &semver{major: major, minor: minor, patch: patch}
+}
+
+// compareVersions returns -1 if a<b, 0 if equal, 1 if a>b.
+// Non-semver values (e.g. "dev") compare as older than any semver.
+func compareVersions(a, b string) int {
+	va, vb := parseVersion(a), parseVersion(b)
+	switch {
+	case va == nil && vb == nil:
+		return 0
+	case va == nil:
+		return -1
+	case vb == nil:
+		return 1
+	case va.major != vb.major:
+		if va.major < vb.major {
+			return -1
+		}
+		return 1
+	case va.minor != vb.minor:
+		if va.minor < vb.minor {
+			return -1
+		}
+		return 1
+	case va.patch != vb.patch:
+		if va.patch < vb.patch {
+			return -1
+		}
+		return 1
+	default:
+		return 0
+	}
 }
 
 func init() {
-	updateCmd.Flags().Bool("force", false, "Reinstall even if already on the latest version")
+	updateCmd.Flags().Bool("force", false, "Reinstall even if already on the latest version (allows downgrade)")
 	rootCmd.AddCommand(updateCmd)
 }
