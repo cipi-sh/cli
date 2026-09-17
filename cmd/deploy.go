@@ -21,6 +21,8 @@ Waits for the async job to finish before returning.
 Subcommands:
   cipi-cli deploy rollback myapp   previous release
   cipi-cli deploy unlock myapp     clear a stuck deploy lock
+  cipi-cli deploy config show myapp
+  cipi-cli deploy audit myapp
 
 ` + multiServerTip,
 	Example: `  cipi-cli deploy myapp

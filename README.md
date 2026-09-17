@@ -113,13 +113,21 @@ cipi-cli apps delete <name> [-y]            Delete an application
 cipi-cli apps suspend <name>                Suspend an application (HTTP 503)
 cipi-cli apps unsuspend <name>              Bring a suspended application back online
 cipi-cli apps logs <name> [flags]           Read application logs
+cipi-cli apps fix-permissions <name>        Restore app home permissions (Cipi 5.2.1+)
+cipi-cli apps artisan <name> [command...]   Run Artisan (async job, Cipi 5.0.3+)
+cipi-cli apps run <name> [command...]       Run whitelisted command (Cipi 5.0.3+)
+cipi-cli apps env show|set <name>           Read/update .env keys (Cipi 5.0.3+)
+cipi-cli apps auth show|create|update|delete  Manage shared auth.json (Cipi 5.0.3+)
+cipi-cli apps basicauth status|enable|disable HTTP Basic Auth
+cipi-cli apps node status|restart <name>    Node app status / blue-green restart (5.4.0+)
+cipi-cli apps search enable|disable <name>  Meilisearch/Scout per app (5.2.2+)
 ```
 
 Alias: `app` → `apps`.
 
-**Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`
+**Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`, `--engine`, `--octane`, `--node`, `--framework`, `--node-version`, `--build`, `--start`, `--output`, `--health-path`
 
-**Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+)
+**Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+), plus Node flags above
 
 **Logs flags:** `--type` (default `all`: nginx, php, worker, deploy, laravel), `--page` (default `1` = most recent), `--per-page` (default `50`, max `1000`; requires API 1.11.9+)
 
@@ -138,13 +146,37 @@ For managing aliases on one app, see **Aliases** below.
 cipi-cli deploy <app>                       Trigger a deployment
 cipi-cli deploy rollback <app> [-y]         Rollback to previous release
 cipi-cli deploy unlock <app>                Unlock a stuck deployment
+cipi-cli deploy config show|set <app>       Structured deploy.php options (5.0.3+)
+cipi-cli deploy audit <app> [--days N]      Deploy audit ledger (5.4.0+)
 ```
 
 ### SSL
 
 ```
 cipi-cli ssl install <app>                  Install Let's Encrypt certificate
+cipi-cli ssl force <app>                    Re-apply HTTP → HTTPS redirect (4.8+)
 ```
+
+### WWW redirects
+
+```
+cipi-cli www status <app>                   Show www/apex redirect status
+cipi-cli www add <app>                      Add www/apex counterpart alias
+cipi-cli www force-to-root <app>            301 redirect www → apex
+cipi-cli www force-from-root <app>          301 redirect apex → www
+cipi-cli www clear <app>                    Clear www canonical redirect
+```
+
+### Redirects & proxies
+
+```
+cipi-cli redirect list <app>                List whole-app + path redirects (5.4.1+)
+cipi-cli redirect set|unset|enable|disable <app>
+cipi-cli redirect add|remove <app>          Path redirects (--from, --to)
+cipi-cli proxies list|add|remove <app>      Prefix reverse proxies (5.4.1+)
+```
+
+Alias: `redirects` → `redirect`, `proxy` → `proxies`.
 
 DNS for the app domain (and aliases) must already point to the server.
 
@@ -161,9 +193,10 @@ Alias: `alias` → `aliases`.
 ### Databases
 
 ```
+cipi-cli db engines                         List DB engines + default (4.8+)
 cipi-cli db list                            List all databases
-cipi-cli db create <name>                   Create a database
-cipi-cli db delete <name> [-y]              Delete a database
+cipi-cli db create <name> [--engine]        Create a database
+cipi-cli db delete <name> [-y]              Delete a database (legacy API)
 cipi-cli db backup <name>                   Create a backup
 cipi-cli db restore <name> [-y]             Restore from backup
 cipi-cli db password <name> [-y]            Regenerate password and update .env
@@ -187,10 +220,30 @@ Requires the API token ability `status-view` (`GET /api/status`, same data as `c
 ```
 cipi-cli jobs show <id>                     Show job status
 cipi-cli jobs wait <id>                     Wait for a job to complete
+cipi-cli run-commands                       List whitelisted app run binaries (5.0.3+)
 ```
 
 Alias: `job` → `jobs`.  
 Most write commands wait for jobs automatically; use these to inspect a job by ID.
+
+### Search, Node, and host insights
+
+```
+cipi-cli search status                      Meilisearch status (5.2.2+)
+cipi-cli node list                          Installed Node runtimes (5.4.0+)
+cipi-cli monitor                            System monitor checks (5.3.0+)
+cipi-cli packages                           Optional host packages catalog
+cipi-cli zt                                 Cloudflare Zero Trust status (5.3.0+)
+```
+
+### IP whitelist
+
+```
+cipi-cli ip-whitelist show                  Show API client IP allowlist (5.0.8+)
+cipi-cli ip-whitelist set <entries...>      Replace whitelist (* = allow all)
+cipi-cli ip-whitelist add|remove <ip>
+cipi-cli ip-whitelist allow-all
+```
 
 ### Configuration & servers (profiles)
 
@@ -288,9 +341,19 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | --- | --- | --- |
 | Suspend / unsuspend | 4.5.8 | 1.8.1 |
 | Rename primary domain (`apps edit --domain`) | 4.6.2 | 1.9.0 |
+| Multi-engine DB (`db engines`, `--engine`) | 4.8 | 1.10+ |
+| WWW / SSL force | 4.8 | 1.10+ |
+| Env / auth.json / artisan / run / deploy config | 5.0.3 | 1.14+ |
+| IP whitelist | 5.0.8 | 1.15+ |
+| Fix permissions | 5.2.1 | 1.18+ |
+| Search (Meilisearch) | 5.2.2 | 1.19+ |
+| Monitor / Zero Trust | 5.3.0 | 1.20+ |
+| Redirects / proxies (API sudoers) | 5.4.1 | 1.22+ |
+| Node apps / deploy audit | 5.4.0 | 1.21+ |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
+| Aliases add/remove path | — | 1.31+ (`/aliases/{domain}`) |
 
 New app PHP versions must be **8.3**, **8.4**, or **8.5** (Cipi 4.5.4+).
 

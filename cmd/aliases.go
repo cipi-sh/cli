@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/cipi-sh/cli/internal/api"
 	"github.com/cipi-sh/cli/internal/output"
@@ -95,12 +96,9 @@ DNS for the domain must already point to the server.
 			return err
 		}
 
-		body := map[string]string{
-			"domain": args[1],
-		}
-
 		output.Info("Adding alias '%s' to app '%s'...", args[1], args[0])
-		if err := client.DoAsyncAndWait("POST", fmt.Sprintf("/api/apps/%s/aliases", args[0]), body); err != nil {
+		path := fmt.Sprintf("/api/apps/%s/aliases/%s", url.PathEscape(args[0]), url.PathEscape(args[1]))
+		if err := client.DoAsyncAndWait("POST", path, nil); err != nil {
 			output.Error("Failed to add alias: %s", err)
 			return err
 		}
@@ -138,12 +136,9 @@ Prompts for confirmation unless -y / --yes is passed.
 			return err
 		}
 
-		body := map[string]string{
-			"domain": args[1],
-		}
-
 		output.Info("Removing alias '%s' from '%s'...", args[1], args[0])
-		if err := client.DoAsyncAndWait("DELETE", fmt.Sprintf("/api/apps/%s/aliases", args[0]), body); err != nil {
+		path := fmt.Sprintf("/api/apps/%s/aliases/%s", url.PathEscape(args[0]), url.PathEscape(args[1]))
+		if err := client.DoAsyncAndWait("DELETE", path, nil); err != nil {
 			output.Error("Failed to remove alias: %s", err)
 			return err
 		}

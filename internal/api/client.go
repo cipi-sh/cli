@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -220,8 +221,13 @@ func (c *Client) GetJob(jobID string) (*JobStatus, error) {
 
 // ListDatabases returns GET /api/dbs. The server may answer synchronously (200 + data) or
 // asynchronously (202 + job_id); in the latter case the job is polled until completion.
-func (c *Client) ListDatabases() ([]map[string]interface{}, error) {
-	resp, err := c.request("GET", "/api/dbs", nil)
+// engine may be "mariadb" or "pgsql" to filter (Cipi 4.8+).
+func (c *Client) ListDatabases(engine string) ([]map[string]interface{}, error) {
+	path := "/api/dbs"
+	if engine != "" {
+		path += "?engine=" + url.QueryEscape(engine)
+	}
+	resp, err := c.request("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}

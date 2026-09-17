@@ -174,6 +174,15 @@ Interactive prompts fill missing flags. Use --custom for non-Laravel apps
 		branch, _ := cmd.Flags().GetString("branch")
 		custom, _ := cmd.Flags().GetBool("custom")
 		docroot, _ := cmd.Flags().GetString("docroot")
+		engine, _ := cmd.Flags().GetString("engine")
+		octane, _ := cmd.Flags().GetString("octane")
+		nodeMode, _ := cmd.Flags().GetString("node")
+		framework, _ := cmd.Flags().GetString("framework")
+		nodeVersion, _ := cmd.Flags().GetString("node-version")
+		build, _ := cmd.Flags().GetString("build")
+		start, _ := cmd.Flags().GetString("start")
+		outputDir, _ := cmd.Flags().GetString("output")
+		healthPath, _ := cmd.Flags().GetString("health-path")
 
 		if user == "" {
 			user = output.ReadInput("App username")
@@ -213,6 +222,40 @@ Interactive prompts fill missing flags. Use --custom for non-Laravel apps
 		}
 		if branch != "" {
 			body["branch"] = branch
+		}
+		if engine != "" {
+			body["engine"] = engine
+		}
+		if octane != "" {
+			switch octane {
+			case "true", "1", "yes":
+				body["octane"] = true
+			case "false", "0", "no":
+				body["octane"] = false
+			default:
+				body["octane"] = octane
+			}
+		}
+		if nodeMode != "" {
+			body["node"] = nodeMode
+		}
+		if framework != "" {
+			body["framework"] = framework
+		}
+		if nodeVersion != "" {
+			body["node_version"] = nodeVersion
+		}
+		if build != "" {
+			body["build"] = build
+		}
+		if start != "" {
+			body["start"] = start
+		}
+		if outputDir != "" {
+			body["output"] = outputDir
+		}
+		if healthPath != "" {
+			body["health_path"] = healthPath
 		}
 
 		output.Info("Creating app '%s'...", user)
@@ -261,9 +304,27 @@ Pass at least one flag: --php, --repository, --branch, or --domain.
 		if v, _ := cmd.Flags().GetString("domain"); v != "" {
 			body["domain"] = v
 		}
+		if v, _ := cmd.Flags().GetString("node"); v != "" {
+			body["node"] = v
+		}
+		if v, _ := cmd.Flags().GetString("node-version"); v != "" {
+			body["node_version"] = v
+		}
+		if v, _ := cmd.Flags().GetString("build"); v != "" {
+			body["build"] = v
+		}
+		if v, _ := cmd.Flags().GetString("start"); v != "" {
+			body["start"] = v
+		}
+		if v, _ := cmd.Flags().GetString("output"); v != "" {
+			body["output"] = v
+		}
+		if v, _ := cmd.Flags().GetString("health-path"); v != "" {
+			body["health_path"] = v
+		}
 
 		if len(body) == 0 {
-			output.Error("No fields to update — use --php, --repository, --branch, or --domain")
+			output.Error("No fields to update — use --php, --repository, --branch, --domain, or Node flags")
 			return fmt.Errorf("no fields specified")
 		}
 
@@ -560,11 +621,26 @@ func init() {
 	appsCreateCmd.Flags().String("branch", "", "Git branch")
 	appsCreateCmd.Flags().Bool("custom", false, "Create as custom app (non-Laravel)")
 	appsCreateCmd.Flags().String("docroot", "", "Custom document root")
+	appsCreateCmd.Flags().String("engine", "", "Database engine (mariadb|pgsql, Cipi 4.8+)")
+	appsCreateCmd.Flags().String("octane", "", "Octane mode (true|false|frankenphp, Cipi 5.0+)")
+	appsCreateCmd.Flags().String("node", "", "Node app mode (spa|static|ssr, Cipi 5.4.0+)")
+	appsCreateCmd.Flags().String("framework", "", "Node framework preset (next, nuxt, sveltekit, astro, remix, vite)")
+	appsCreateCmd.Flags().String("node-version", "", "Node major version")
+	appsCreateCmd.Flags().String("build", "", "Node build command")
+	appsCreateCmd.Flags().String("start", "", "Node start command (SSR)")
+	appsCreateCmd.Flags().String("output", "", "Node build output directory (spa/static)")
+	appsCreateCmd.Flags().String("health-path", "", "Node health path (SSR)")
 
 	appsEditCmd.Flags().String("php", "", "PHP version")
 	appsEditCmd.Flags().String("repository", "", "Git repository SSH URL")
 	appsEditCmd.Flags().String("branch", "", "Git branch")
 	appsEditCmd.Flags().String("domain", "", "New primary domain (requires Cipi 4.6.2+ / API 1.9.0+)")
+	appsEditCmd.Flags().String("node", "", "Node app mode (spa|static|ssr)")
+	appsEditCmd.Flags().String("node-version", "", "Node major version")
+	appsEditCmd.Flags().String("build", "", "Node build command")
+	appsEditCmd.Flags().String("start", "", "Node start command (SSR)")
+	appsEditCmd.Flags().String("output", "", "Node build output directory")
+	appsEditCmd.Flags().String("health-path", "", "Node health path (SSR)")
 
 	appsDeleteCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
 

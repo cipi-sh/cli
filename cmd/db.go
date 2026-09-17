@@ -12,7 +12,7 @@ var dbCmd = &cobra.Command{
 	Use:     "db",
 	Aliases: []string{"database", "dbs"},
 	Short:   "Manage databases",
-	Long: `Create, backup, restore, and manage MySQL databases on the selected server.
+	Long: `Create, backup, restore, and manage MariaDB/PostgreSQL databases on the selected server.
 
   cipi-cli db list
   cipi-cli db create mydb
@@ -31,6 +31,44 @@ var dbCmd = &cobra.Command{
   cipi-cli db delete mydb -y`,
 }
 
+var dbEnginesCmd = &cobra.Command{
+	Use:     "engines",
+	Aliases: []string{"engine"},
+	Short:   "List installed database engines",
+	Long: `List installed database engines and the server default.
+
+Requires Cipi 4.8+.
+
+  cipi-cli db engines
+  cipi-cli prod db engines`,
+	Example: `  cipi-cli db engines
+  cipi-cli db engines --json`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := api.NewClient()
+		if err != nil {
+			output.Error("%s", err)
+			return err
+		}
+
+		var result struct {
+			Data map[string]interface{} `json:"data"`
+		}
+		if err := client.Get("/api/dbs/engines", &result); err != nil {
+			output.Error("Failed to list database engines: %s", apiErrorHint(err, "4.8", "dbs-view"))
+			return err
+		}
+
+		if jsonFlag {
+			output.PrintJSON(result)
+			return nil
+		}
+
+		output.Header("Database engines")
+		printDataWrapper(result.Data)
+		return nil
+	},
+}
+
 var dbListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all databases",
@@ -42,13 +80,15 @@ var dbListCmd = &cobra.Command{
   cipi-cli staging db list
   cipi-cli db list --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		engine, _ := cmd.Flags().GetString("engine")
+
 		client, err := api.NewClient()
 		if err != nil {
 			output.Error("%s", err)
 			return err
 		}
 
-		dbs, err := client.ListDatabases()
+		dbs, err := client.ListDatabases(engine)
 		if err != nil {
 			output.Error("Failed to list databases: %s", err)
 			return err
@@ -85,7 +125,9 @@ var dbListCmd = &cobra.Command{
 var dbCreateCmd = &cobra.Command{
 	Use:   "create <name>",
 	Short: "Create a new database",
-	Long: `Create a new MySQL database on the selected server.
+	Long: `Create a new database on the selected server.
+
+Use --engine to pick mariadb or pgsql (Cipi 4.8+).
 
   cipi-cli db create mydb
   cipi-cli prod db create mydb`,
@@ -99,8 +141,12 @@ var dbCreateCmd = &cobra.Command{
 			return err
 		}
 
+		engine, _ := cmd.Flags().GetString("engine")
 		body := map[string]string{
 			"name": args[0],
+		}
+		if engine != "" {
+			body["engine"] = engine
 		}
 
 		output.Info("Creating database '%s'...", args[0])
@@ -267,6 +313,9 @@ func init() {
 	dbRestoreCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
 	dbPasswordCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
 
-	dbCmd.AddCommand(dbListCmd, dbCreateCmd, dbDeleteCmd, dbBackupCmd, dbRestoreCmd, dbPasswordCmd)
+	dbCreateCmd.Flags().String("engine", "", "Database engine (mariadb|pgsql)")
+	dbListCmd.Flags().String("engine", "", "Filter by engine (mariadb|pgsql)")
+
+	dbCmd.AddCommand(dbEnginesCmd, dbListCmd, dbCreateCmd, dbDeleteCmd, dbBackupCmd, dbRestoreCmd, dbPasswordCmd)
 	rootCmd.AddCommand(dbCmd)
 }
