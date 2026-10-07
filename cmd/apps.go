@@ -131,6 +131,7 @@ for one application.
 		output.KeyValue(nil, "Docroot", str(app, "docroot"))
 		output.KeyValue(nil, "Suspended", str(app, "suspended"))
 		output.KeyValue(nil, "Created", str(app, "created_at"))
+		printAppExtras(app)
 
 		if aliases, ok := app["aliases"].([]interface{}); ok && len(aliases) > 0 {
 			fmt.Println()
@@ -151,7 +152,8 @@ var appsCreateCmd = &cobra.Command{
 	Long: `Create a new application on the selected server.
 
 Interactive prompts fill missing flags. Use --custom for non-Laravel apps
-(SFTP / custom docroot).
+(SFTP / custom docroot) and --node for Node apps (Cipi 5.4.0+; no PHP, a
+repository is required).
 
   cipi-cli apps create
   cipi-cli apps create --user myapp --domain example.com --php 8.4 \
@@ -159,7 +161,9 @@ Interactive prompts fill missing flags. Use --custom for non-Laravel apps
 	Example: `  cipi-cli apps create
   cipi-cli apps create --user myapp --domain example.com --php 8.4 \
     --repository git@github.com:org/repo.git --branch main
-  cipi-cli apps create --user static --domain site.com --php 8.4 --custom --docroot public`,
+  cipi-cli apps create --user static --domain site.com --php 8.4 --custom --docroot public
+  cipi-cli apps create --user web --domain web.com --node ssr --framework next \
+    --repository git@github.com:org/web.git --branch main`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
 		if err != nil {
@@ -190,7 +194,8 @@ Interactive prompts fill missing flags. Use --custom for non-Laravel apps
 		if domain == "" {
 			domain = output.ReadInput("Domain")
 		}
-		if php == "" {
+		// Node apps refuse a PHP version (Cipi 5.4.0+).
+		if php == "" && nodeMode == "" {
 			php = output.ReadInput("PHP version (8.3/8.4/8.5)")
 		}
 		if repository == "" && !custom {
@@ -208,7 +213,9 @@ Interactive prompts fill missing flags. Use --custom for non-Laravel apps
 		body := map[string]interface{}{
 			"user":   user,
 			"domain": domain,
-			"php":    php,
+		}
+		if php != "" {
+			body["php"] = php
 		}
 
 		if custom {
@@ -273,9 +280,11 @@ Interactive prompts fill missing flags. Use --custom for non-Laravel apps
 var appsEditCmd = &cobra.Command{
 	Use:   "edit <name>",
 	Short: "Edit an existing application",
-	Long: `Update PHP version, repository, branch, and/or primary domain.
+	Long: `Update PHP version, repository, branch, primary domain, and/or Node settings.
 
-Pass at least one flag: --php, --repository, --branch, or --domain.
+Pass at least one flag: --php, --repository, --branch, --domain, or a Node flag
+(--node, --node-version, --build, --start, --output, --health-path).
+--node-version also pins a Laravel app to a Node major ('default' unpins it).
 
   cipi-cli apps edit myapp --php 8.4
   cipi-cli apps edit myapp --branch develop --domain new.example.com`,
@@ -507,6 +516,50 @@ var appsUnsuspendCmd = &cobra.Command{
 		fmt.Println()
 		return nil
 	},
+}
+
+// printAppExtras prints the optional fields exposed by newer Cipi API versions
+// (engine, Octane, Node, routing, basic auth); absent or empty fields are skipped.
+func printAppExtras(app map[string]interface{}) {
+	optional := func(label, key string) {
+		v, ok := app[key]
+		if !ok || v == nil || v == "" {
+			return
+		}
+		output.KeyValue(nil, label, formatFieldValue(v))
+	}
+	optional("Engine", "engine")
+	optional("Octane", "octane")
+	optional("Octane port", "octane_port")
+	if boolVal(app, "node") {
+		output.KeyValue(nil, "Node", "yes")
+		optional("Node mode", "node_mode")
+	}
+	optional("Node version", "node_version")
+	optional("Force HTTPS", "force_https")
+	optional("WWW redirect", "www_redirect")
+	optional("Basic auth", "basic_auth")
+	if r, ok := app["redirect"].(map[string]interface{}); ok && len(r) > 0 {
+		redirect := str(r, "to")
+		if code := str(r, "code"); code != "—" {
+			redirect += " (" + code + ")"
+		}
+		if enabled, ok := r["enabled"].(bool); ok && !enabled {
+			redirect += " [disabled]"
+		}
+		output.KeyValue(nil, "Redirect", redirect)
+	}
+	if n := len(sliceVal(app, "redirects")); n > 0 {
+		output.KeyValue(nil, "Path redirects", fmt.Sprintf("%d (cipi-cli redirect list %s)", n, str(app, "app")))
+	}
+	if n := len(sliceVal(app, "proxies")); n > 0 {
+		output.KeyValue(nil, "Proxies", fmt.Sprintf("%d (cipi-cli proxies list %s)", n, str(app, "app")))
+	}
+}
+
+func sliceVal(m map[string]interface{}, key string) []interface{} {
+	v, _ := m[key].([]interface{})
+	return v
 }
 
 func isAppLogType(t string) bool {

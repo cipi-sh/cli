@@ -386,17 +386,23 @@ func (c *Client) WaitForJob(jobID string) (*JobStatus, error) {
 }
 
 func (c *Client) DoAsyncAndWait(method, path string, body interface{}) error {
+	_, err := c.DoAsyncAndWaitResult(method, path, body)
+	return err
+}
+
+// DoAsyncAndWaitResult is DoAsyncAndWait but also returns the finished job, so callers can
+// read its parsed result (nil when the API answered synchronously without a job_id).
+func (c *Client) DoAsyncAndWaitResult(method, path string, body interface{}) (*JobStatus, error) {
 	async, err := c.DoAsync(method, path, body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if async == nil {
-		return nil
+		return nil, nil
 	}
 
 	output.Info("Job dispatched: %s", async.JobIDString())
 
-	_, err = c.WaitForJob(async.JobIDString())
-	return err
+	return c.WaitForJob(async.JobIDString())
 }

@@ -149,6 +149,29 @@ func formatFieldValue(v interface{}) string {
 	}
 }
 
+// colorStatus colors common service/runtime states (active, running, ok, …).
+func colorStatus(s string) string {
+	switch strings.ToLower(s) {
+	case "active", "running", "ok", "up", "healthy", "installed", "enabled":
+		return output.Green.Sprint(s)
+	case "inactive", "failed", "dead", "down", "error", "unhealthy", "disabled":
+		return output.Red.Sprint(s)
+	case "", "—":
+		return s
+	default:
+		return output.Yellow.Sprint(s)
+	}
+}
+
+// jobResultMap returns the parsed result object of a finished job, if any.
+func jobResultMap(job *api.JobStatus) (map[string]interface{}, bool) {
+	if job == nil {
+		return nil, false
+	}
+	m, ok := job.Result.(map[string]interface{})
+	return m, ok
+}
+
 func apiErrorHint(err error, minVersion, feature string) string {
 	if msg := api.RouteNotFoundHint(err, minVersion, feature); msg != err.Error() {
 		return msg

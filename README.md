@@ -1,6 +1,6 @@
 # cipi-cli
 
-Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, and deployments from the terminal.
+Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, deployments, PHP, services, SMTP, and healthchecks from the terminal.
 
 ## Installation
 
@@ -121,11 +121,12 @@ cipi-cli apps auth show|create|update|delete  Manage shared auth.json (Cipi 5.0.
 cipi-cli apps basicauth status|enable|disable HTTP Basic Auth
 cipi-cli apps node status|restart <name>    Node app status / blue-green restart (5.4.0+)
 cipi-cli apps search enable|disable <name>  Meilisearch/Scout per app (5.2.2+)
+cipi-cli apps webhook recreate <name>       Recreate Git webhook [--rotate-secret] (5.0.6+)
 ```
 
 Alias: `app` → `apps`.
 
-**Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`, `--engine`, `--octane`, `--node`, `--framework`, `--node-version`, `--build`, `--start`, `--output`, `--health-path`
+**Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`, `--engine`, `--octane`, `--node`, `--framework`, `--node-version`, `--build`, `--start`, `--output`, `--health-path` (Node apps take no `--php`)
 
 **Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+), plus Node flags above
 
@@ -194,15 +195,60 @@ Alias: `alias` → `aliases`.
 
 ```
 cipi-cli db engines                         List DB engines + default (4.8+)
+cipi-cli db install <engine>                Install an engine: mariadb|pgsql (5.0.6+)
 cipi-cli db list                            List all databases
 cipi-cli db create <name> [--engine]        Create a database
-cipi-cli db delete <name> [-y]              Delete a database (legacy API)
+cipi-cli db delete <name> [-y]              Delete a database (API < 1.19 only)
 cipi-cli db backup <name>                   Create a backup
 cipi-cli db restore <name> [-y]             Restore from backup
 cipi-cli db password <name> [-y]            Regenerate password and update .env
 ```
 
-Aliases: `database`, `dbs` → `db`.
+Aliases: `database`, `dbs` → `db`.  
+API 1.19+ removed database deletion and setting the default engine: use `cipi db delete` / `cipi db default` on the host.
+
+### PHP
+
+```
+cipi-cli php list                           Installed versions, FPM status, default (5.0.6+)
+cipi-cli php install <version>              Install PHP 8.3 / 8.4 / 8.5
+```
+
+Switching the default PHP version and removing versions are host-only (`cipi php switch|remove`).
+
+### Server services & SSH keys
+
+```
+cipi-cli services list [name]               System services and status (5.0.6+)
+cipi-cli services restart <name>            Restart a service (nginx, mariadb, …)
+cipi-cli ssh-keys list                      Authorized keys of the cipi user (5.0.6+)
+cipi-cli ssh-keys add [key] [--file F]      Add a public key (inline or from a .pub file)
+cipi-cli ssh-keys remove <id> [-y]          Remove a key by id
+```
+
+Aliases: `service` → `services`, `ssh` → `ssh-keys`.
+
+### SMTP notifications
+
+```
+cipi-cli smtp show                          Current SMTP config (password never shown, 5.0.7+)
+cipi-cli smtp set [flags]                   Configure; omitted flags keep current values
+cipi-cli smtp test                          Send a test email
+cipi-cli smtp enable|disable                Toggle notifications
+cipi-cli smtp delete [-y]                   Remove the configuration
+```
+
+**Set flags:** `--host`, `--port` (587), `--user`, `--password` (required the first time), `--from`, `--to`, `--tls` (default on), `--enabled` (default on), `--no-test`
+
+### Healthchecks
+
+```
+cipi-cli health list                        All configured app healthchecks (5.0.7+)
+cipi-cli health show <app>                  One app's healthcheck and state
+cipi-cli health set <app> [--url] [--expect] Enable/update (default https://<domain>/up, 200)
+cipi-cli health unset <app>                 Disable
+cipi-cli health check <app>                 Run now; exits 1 when unhealthy
+```
 
 ### Status
 
@@ -341,15 +387,17 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | --- | --- | --- |
 | Suspend / unsuspend | 4.5.8 | 1.8.1 |
 | Rename primary domain (`apps edit --domain`) | 4.6.2 | 1.9.0 |
-| Multi-engine DB (`db engines`, `--engine`) | 4.8 | 1.10+ |
-| WWW / SSL force | 4.8 | 1.10+ |
+| Multi-engine DB (`db engines`, `--engine`) | 4.8 | 1.12+ |
+| WWW / SSL force | 4.8 | 1.12+ |
 | Env / auth.json / artisan / run / deploy config | 5.0.3 | 1.14+ |
+| PHP / SSH keys / services / `db install` / webhook recreate | 5.0.6 | 1.15+ |
+| SMTP / healthchecks | 5.0.7 | 1.15+ |
 | IP whitelist | 5.0.8 | 1.15+ |
-| Fix permissions | 5.2.1 | 1.18+ |
-| Search (Meilisearch) | 5.2.2 | 1.19+ |
-| Monitor / Zero Trust | 5.3.0 | 1.20+ |
-| Redirects / proxies (API sudoers) | 5.4.1 | 1.22+ |
-| Node apps / deploy audit | 5.4.0 | 1.21+ |
+| Fix permissions | 5.2.1 | 1.31+ |
+| Search (Meilisearch) / packages | 5.2.2 | 1.31+ |
+| Monitor / Zero Trust | 5.3.0 | 1.31+ |
+| Redirects / proxies (API sudoers) | 5.4.1 | 1.31+ |
+| Node apps / deploy audit | 5.4.0 | 1.31+ |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |

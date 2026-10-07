@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/cipi-sh/cli/internal/api"
 	"github.com/cipi-sh/cli/internal/output"
@@ -14,6 +16,8 @@ var dbCmd = &cobra.Command{
 	Short:   "Manage databases",
 	Long: `Create, backup, restore, and manage MariaDB/PostgreSQL databases on the selected server.
 
+  cipi-cli db engines
+  cipi-cli db install pgsql
   cipi-cli db list
   cipi-cli db create mydb
   cipi-cli db backup mydb
@@ -65,6 +69,38 @@ Requires Cipi 4.8+.
 
 		output.Header("Database engines")
 		printDataWrapper(result.Data)
+		return nil
+	},
+}
+
+var dbInstallCmd = &cobra.Command{
+	Use:   "install <engine>",
+	Short: "Install a database engine (mariadb|pgsql)",
+	Long: `Install a database engine on the selected server (async job).
+
+Engines: mariadb, pgsql. Requires Cipi 5.0.6+ (API 1.15+) and the dbs-manage
+ability. Changing the default engine is host-only ('cipi db default').
+
+  cipi-cli db install pgsql
+  cipi-cli prod db install mariadb`,
+	Example: `  cipi-cli db install pgsql
+  cipi-cli db engines`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := mustClient()
+		if err != nil {
+			return err
+		}
+
+		output.Info("Installing database engine '%s'...", args[0])
+		body := map[string]string{"engine": args[0]}
+		if err := client.DoAsyncAndWait("POST", "/api/dbs/engines/install", body); err != nil {
+			output.Error("Engine install failed: %s", apiErrorHint(err, "1.15.0", "dbs-manage"))
+			return err
+		}
+
+		output.Success("Database engine '%s' installed", args[0])
+		fmt.Println()
 		return nil
 	},
 }
@@ -163,11 +199,14 @@ Use --engine to pick mariadb or pgsql (Cipi 4.8+).
 
 var dbDeleteCmd = &cobra.Command{
 	Use:   "delete <name>",
-	Short: "Delete a database permanently",
+	Short: "Delete a database permanently (API < 1.19 only)",
 	Long: `Permanently delete a database. This cannot be undone.
 
 Prompts for confirmation unless -y / --yes is passed.
 Consider 'cipi-cli db backup <name>' first.
+
+Cipi API 1.19+ removed database deletion: on those servers run
+'cipi db delete <name>' on the host instead.
 
   cipi-cli db delete mydb
   cipi-cli db delete mydb -y`,
@@ -191,6 +230,11 @@ Consider 'cipi-cli db backup <name>' first.
 
 		output.Info("Deleting database '%s'...", args[0])
 		if err := client.DoAsyncAndWait("DELETE", fmt.Sprintf("/api/dbs/%s", args[0]), nil); err != nil {
+			var apiErr *api.APIError
+			if errors.As(err, &apiErr) && (apiErr.IsRouteNotFound() || apiErr.Status == http.StatusMethodNotAllowed) {
+				output.Error("Failed to delete database: Cipi API 1.19+ no longer deletes databases — run 'cipi db delete %s' on the host", args[0])
+				return err
+			}
 			output.Error("Failed to delete database: %s", err)
 			return err
 		}
@@ -316,6 +360,6 @@ func init() {
 	dbCreateCmd.Flags().String("engine", "", "Database engine (mariadb|pgsql)")
 	dbListCmd.Flags().String("engine", "", "Filter by engine (mariadb|pgsql)")
 
-	dbCmd.AddCommand(dbEnginesCmd, dbListCmd, dbCreateCmd, dbDeleteCmd, dbBackupCmd, dbRestoreCmd, dbPasswordCmd)
+	dbCmd.AddCommand(dbEnginesCmd, dbInstallCmd, dbListCmd, dbCreateCmd, dbDeleteCmd, dbBackupCmd, dbRestoreCmd, dbPasswordCmd)
 	rootCmd.AddCommand(dbCmd)
 }
