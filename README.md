@@ -1,6 +1,6 @@
 # cipi-cli
 
-Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, deployments, PHP, services, SMTP, and healthchecks from the terminal.
+Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, deployments, PHP, services, SMTP, healthchecks, and disk usage from the terminal.
 
 ## Installation
 
@@ -282,6 +282,16 @@ cipi-cli <profile> status                   Same, via profile prefix
 Global columns: NAME, IP, CPU, RAM, HDD, APPS, SVC, CIPI.  
 Requires the API token ability `status-view` (`GET /api/status`, same data as `cipi status` on the host).
 
+### Disk
+
+```
+cipi-cli disk                               Disk usage: the server filesystem, then every app (GB and %)
+cipi-cli disk db                            Every database per engine, in MB
+```
+
+Aliases: `dbs`, `databases` → `disk db`.  
+The figures of `cipi disk` on the host: an app is its home (releases, shared storage, logs) plus its database, largest first; the LIMIT column shows the soft limit set with `cipi app limits <app> --disk=<GB>` and flags apps over it. `disk db` lists MariaDB and PostgreSQL databases in MB, Valkey databases with their keys and memory, Meilisearch indexes with their documents. Sizes are measured by the server when asked, so the CLI waits up to three minutes. Requires Cipi 5.5.2+ (API sudoers), API 1.33+ and the `disk-view` ability.
+
 ### Jobs
 
 ```
@@ -419,6 +429,7 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | Monitor / Zero Trust | 5.3.0 | 1.31+ |
 | Redirects / proxies (API sudoers) | 5.4.1 | 1.31+ |
 | Node apps / deploy audit | 5.4.0 | 1.31+ |
+| Disk usage (`disk`, `disk db`) | 5.5.2 (API sudoers) | 1.33+ |
 | Anonymized dumps (`db anonymize`) | 5.0.3 | 1.14+ (plus cipi/agent 1.1.1+ in the app) |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |
