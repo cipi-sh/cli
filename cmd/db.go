@@ -24,6 +24,7 @@ var dbCmd = &cobra.Command{
   cipi-cli db restore mydb
   cipi-cli db password mydb
   cipi-cli db delete mydb
+  cipi-cli db anonymize myapp --email dev@example.com   # anonymized dump via cipi/agent
 
 ` + multiServerTip,
 	Example: `  cipi-cli db list
@@ -32,7 +33,9 @@ var dbCmd = &cobra.Command{
   cipi-cli db backup mydb
   cipi-cli db restore mydb -y
   cipi-cli db password mydb -y
-  cipi-cli db delete mydb -y`,
+  cipi-cli db delete mydb -y
+  cipi-cli db anonymize myapp --email dev@example.com
+  cipi-cli db anonymize download "<signed url>" -o myapp.sql`,
 }
 
 var dbEnginesCmd = &cobra.Command{

@@ -202,10 +202,31 @@ cipi-cli db delete <name> [-y]              Delete a database (API < 1.19 only)
 cipi-cli db backup <name>                   Create a backup
 cipi-cli db restore <name> [-y]             Restore from backup
 cipi-cli db password <name> [-y]            Regenerate password and update .env
+cipi-cli db anonymize <app> --email <addr>  Request an anonymized dump via cipi/agent
+cipi-cli db anonymize download <url> [-o F] Download the dump from the signed link
 ```
 
 Aliases: `database`, `dbs` → `db`.  
 API 1.19+ removed database deletion and setting the default engine: use `cipi db delete` / `cipi db default` on the host.
+
+#### Anonymized dumps (cipi/agent)
+
+`db anonymize` talks to the [cipi/agent](https://github.com/cipi-sh/agent) package installed in a Laravel app, not to the Cipi API: it reads the app URL (`APP_URL`, else `https://<primary domain>`) and `CIPI_ANONYMIZER_TOKEN` from the app `.env` through the API (`apps-view` + `apps-env` abilities), then calls `POST /<CIPI_ROUTE_PREFIX>/db` on the app. The agent runs the job in the app queue and emails a signed download link valid 15 minutes.
+
+```bash
+# one-time setup on the app
+cipi-cli apps artisan myapp cipi:service anonymize --enable
+cipi-cli apps artisan myapp cipi:generate-token anonymize
+cipi-cli apps artisan myapp cipi:init-anonymize      # then edit /home/<user>/.db/anonymization.json
+
+# request a dump, then download it from the link in the email
+cipi-cli prod db anonymize myapp --email dev@example.com
+cipi-cli db anonymize download "<signed url>" -o myapp.sql
+cipi-cli db anonymize download "<signed url>" -o - | mysql -u root myapp_local
+```
+
+**Anonymize flags:** `--email` / `-e` (prompted if omitted), `--url` (override the app base URL, e.g. when the app redirects to `www`), `--token` (override the bearer token)  
+**Download flags:** `--output` / `-o` (`-` for stdout), `--force` / `-f` (overwrite)
 
 ### PHP
 
@@ -398,6 +419,7 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | Monitor / Zero Trust | 5.3.0 | 1.31+ |
 | Redirects / proxies (API sudoers) | 5.4.1 | 1.31+ |
 | Node apps / deploy audit | 5.4.0 | 1.31+ |
+| Anonymized dumps (`db anonymize`) | 5.0.3 | 1.14+ (plus cipi/agent 1.1.1+ in the app) |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
