@@ -154,6 +154,28 @@ func ReadInput(prompt string) string {
 	return strings.TrimSpace(input)
 }
 
+// ReadLine reads a whole line (spaces included), unlike ReadInput which stops at
+// the first word. It reads stdin one byte at a time so nothing past the newline
+// is consumed, keeping later ReadInput/Confirm prompts in sync.
+func ReadLine(prompt string) string {
+	Cyan.Printf("  %s: ", prompt)
+	var line []byte
+	buf := make([]byte, 1)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if n == 1 {
+			if buf[0] == '\n' {
+				break
+			}
+			line = append(line, buf[0])
+		}
+		if err != nil {
+			break
+		}
+	}
+	return strings.TrimSpace(string(line))
+}
+
 func ReadSecret(prompt string) string {
 	Cyan.Printf("  %s: ", prompt)
 	var input string

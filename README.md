@@ -126,7 +126,9 @@ cipi-cli apps webhook recreate <name>       Recreate Git webhook [--rotate-secre
 
 Alias: `app` → `apps`.
 
-**Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`, `--engine`, `--octane`, `--node`, `--framework`, `--node-version`, `--build`, `--start`, `--output`, `--health-path` (Node apps take no `--php`)
+**Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`, `--engine`, `--octane`, `--node`, `--framework`, `--node-version`, `--build`, `--start`, `--output`, `--health-path` (Node apps take no `--php`), `--node-build` (Laravel apps only: the asset build run inside every deploy before go-live, e.g. `--node-build "npm ci && npm run build"`; must start with npm/npx/yarn/pnpm/bun/node, `&&` and `;` allowed, no pipes/redirects/backticks/`$( )`, max 200 chars; requires Cipi 5.6.0+ / API 1.34+). The interactive flow offers an optional build command prompt for Laravel apps.
+
+When the create job completes the CLI prints the app credentials (SSH, database), deploy key, webhook and build. With Cipi 5.6.0+ / API 1.34+, `apps create` and `apps edit --repository/--branch` also report whether the deploy key can read the repository: reachable (with the branch), reachable but the branch is missing, or not readable (the first deploy will fail; git's error and the fix command to run on the server are shown). Older servers report nothing. With `--json`, the job result is printed as `{"data": …}`, `repository_access` and `build` included.
 
 **Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+), plus Node flags above
 
@@ -430,6 +432,7 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | Redirects / proxies (API sudoers) | 5.4.1 | 1.31+ |
 | Node apps / deploy audit | 5.4.0 | 1.31+ |
 | Disk usage (`disk`, `disk db`) | 5.5.2 (API sudoers) | 1.33+ |
+| `apps create --node-build`, repository access check on create/edit | 5.6.0 | 1.34+ |
 | Anonymized dumps (`db anonymize`) | 5.0.3 | 1.14+ (plus cipi/agent 1.1.1+ in the app) |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |

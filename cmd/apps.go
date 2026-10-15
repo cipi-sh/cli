@@ -155,12 +155,25 @@ Interactive prompts fill missing flags. Use --custom for non-Laravel apps
 (SFTP / custom docroot) and --node for Node apps (Cipi 5.4.0+; no PHP, a
 repository is required).
 
+--node-build sets the asset build a Laravel app runs inside every deploy,
+before the release goes live (e.g. "npm ci && npm run build"). It must start
+with npm, npx, yarn, pnpm, bun or node; && and ; are allowed, pipes,
+redirects, backticks and $( ) are not; 200 characters at most. Not for custom
+or Node apps (Node apps take --build). Requires Cipi 5.6.0+ / API 1.34+.
+
+When the job completes the CLI prints the new app's credentials, deploy key
+and webhook, and (Cipi 5.6.0+ / API 1.34+) whether the deploy key can read the
+repository.
+
   cipi-cli apps create
   cipi-cli apps create --user myapp --domain example.com --php 8.4 \
     --repository git@github.com:org/repo.git --branch main`,
 	Example: `  cipi-cli apps create
   cipi-cli apps create --user myapp --domain example.com --php 8.4 \
     --repository git@github.com:org/repo.git --branch main
+  cipi-cli apps create --user myapp --domain example.com --php 8.4 \
+    --repository git@github.com:org/repo.git --branch main \
+    --node-build "npm ci && npm run build"
   cipi-cli apps create --user static --domain site.com --php 8.4 --custom --docroot public
   cipi-cli apps create --user web --domain web.com --node ssr --framework next \
     --repository git@github.com:org/web.git --branch main`,
@@ -187,22 +200,34 @@ repository is required).
 		start, _ := cmd.Flags().GetString("start")
 		outputDir, _ := cmd.Flags().GetString("output")
 		healthPath, _ := cmd.Flags().GetString("health-path")
+		nodeBuild, _ := cmd.Flags().GetString("node-build")
 
+		// Prompt for missing required fields; once in the interactive flow, also
+		// offer the optional asset build (Laravel apps only).
+		interactive := false
+		prompt := func(label string) string {
+			interactive = true
+			return output.ReadInput(label)
+		}
 		if user == "" {
-			user = output.ReadInput("App username")
+			user = prompt("App username")
 		}
 		if domain == "" {
-			domain = output.ReadInput("Domain")
+			domain = prompt("Domain")
 		}
 		// Node apps refuse a PHP version (Cipi 5.4.0+).
 		if php == "" && nodeMode == "" {
-			php = output.ReadInput("PHP version (8.3/8.4/8.5)")
+			php = prompt("PHP version (8.3/8.4/8.5)")
 		}
 		if repository == "" && !custom {
-			repository = output.ReadInput("Git repository SSH URL")
+			repository = prompt("Git repository SSH URL")
 		}
 		if branch == "" && !custom {
-			branch = output.ReadInput("Git branch")
+			branch = prompt("Git branch")
+		}
+		isLaravel := !custom && nodeMode == "" && framework == ""
+		if interactive && isLaravel && nodeBuild == "" && !cmd.Flags().Changed("node-build") {
+			nodeBuild = output.ReadLine("Build command, e.g. npm ci && npm run build (optional, Enter to skip)")
 		}
 
 		if !custom && repository == "" {
@@ -264,14 +289,32 @@ repository is required).
 		if healthPath != "" {
 			body["health_path"] = healthPath
 		}
+		if nodeBuild != "" {
+			body["node_build"] = nodeBuild
+		}
 
 		output.Info("Creating app '%s'...", user)
-		if err := client.DoAsyncAndWait("POST", "/api/apps", body); err != nil {
+		job, err := client.DoAsyncAndWaitResult("POST", "/api/apps", body)
+		if err != nil {
 			output.Error("Failed to create app: %s", err)
 			return err
 		}
 
+		result, _ := jobResultMap(job)
+		if jsonFlag {
+			output.PrintJSON(map[string]interface{}{"data": result})
+			return nil
+		}
+
 		output.Success("App '%s' created successfully", user)
+		printAppCreateResult(result)
+		// Servers before API 1.34 drop node_build silently: say so when the
+		// result came back without the build it should echo.
+		if nodeBuild != "" && result != nil {
+			if _, ok := result["build"]; !ok {
+				output.Warn("The server did not confirm the build command (needs Cipi 5.6.0+ / API 1.34+) — set it with: cipi-cli deploy config set %s --node-build %q", user, nodeBuild)
+			}
+		}
 		fmt.Println()
 		return nil
 	},
@@ -285,6 +328,9 @@ var appsEditCmd = &cobra.Command{
 Pass at least one flag: --php, --repository, --branch, --domain, or a Node flag
 (--node, --node-version, --build, --start, --output, --health-path).
 --node-version also pins a Laravel app to a Node major ('default' unpins it).
+
+With Cipi 5.6.0+ / API 1.34+, changing --repository or --branch also reports
+whether the deploy key can read the repository (and the fix to run if not).
 
   cipi-cli apps edit myapp --php 8.4
   cipi-cli apps edit myapp --branch develop --domain new.example.com`,
@@ -338,12 +384,24 @@ Pass at least one flag: --php, --repository, --branch, --domain, or a Node flag
 		}
 
 		output.Info("Updating app '%s'...", args[0])
-		if err := client.DoAsyncAndWait("PUT", fmt.Sprintf("/api/apps/%s", args[0]), body); err != nil {
+		job, err := client.DoAsyncAndWaitResult("PUT", fmt.Sprintf("/api/apps/%s", args[0]), body)
+		if err != nil {
 			output.Error("Failed to update app: %s", err)
 			return err
 		}
 
+		result, _ := jobResultMap(job)
+		if jsonFlag {
+			output.PrintJSON(map[string]interface{}{"data": result})
+			return nil
+		}
+
 		output.Success("App '%s' updated successfully", args[0])
+		// Cipi 5.6.0+ / API 1.34+ re-checks the deploy key when the repository
+		// or branch changes; older servers report nothing here.
+		if ra, ok := result["repository_access"].(map[string]interface{}); ok {
+			printRepositoryAccess(ra, "next")
+		}
 		fmt.Println()
 		return nil
 	},
@@ -683,6 +741,7 @@ func init() {
 	appsCreateCmd.Flags().String("start", "", "Node start command (SSR)")
 	appsCreateCmd.Flags().String("output", "", "Node build output directory (spa/static)")
 	appsCreateCmd.Flags().String("health-path", "", "Node health path (SSR)")
+	appsCreateCmd.Flags().String("node-build", "", `Laravel asset build run inside every deploy, e.g. "npm ci && npm run build" (Cipi 5.6.0+ / API 1.34+; not for custom/Node apps)`)
 
 	appsEditCmd.Flags().String("php", "", "PHP version")
 	appsEditCmd.Flags().String("repository", "", "Git repository SSH URL")
