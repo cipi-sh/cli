@@ -103,3 +103,87 @@ func printRepositoryAccess(ra map[string]interface{}, which string) {
 		fmt.Printf("    %s\n", d)
 	}
 }
+
+// ymlApplyReport is the human form of an `app-yml-apply` job result.
+type ymlApplyReport struct {
+	OK      bool     // true: applied or unchanged
+	Message string   // headline
+	Details []string // failed changes, blockers or validation errors
+	Hint    string   // what to do next, if anything
+}
+
+// ymlApplySucceeded is true for the outcomes that end the job as completed.
+func ymlApplySucceeded(result map[string]interface{}) bool {
+	outcome, _ := result["outcome"].(string)
+	return outcome == "applied" || outcome == "unchanged"
+}
+
+// describeYmlApplyResult turns the `app-yml-apply` result (Cipi 5.6.4+ / API
+// 1.35+: outcome applied|unchanged|partial|blocked|invalid|no-file, applied and
+// failed counts, failures, blockers, errors) into a report. app is the name
+// asked for, used when the result does not carry one.
+func describeYmlApplyResult(result map[string]interface{}, app string) ymlApplyReport {
+	if name, ok := result["app"].(string); ok && name != "" {
+		app = name
+	}
+	outcome, _ := result["outcome"].(string)
+	applied := ymlCount(result["applied"])
+	failed := ymlCount(result["failed"])
+	failures := ymlStrings(result["failures"])
+	blockers := ymlStrings(result["blockers"])
+	errs := ymlStrings(result["errors"])
+
+	var r ymlApplyReport
+	switch outcome {
+	case "applied":
+		r.OK = true
+		if applied > 0 {
+			r.Message = fmt.Sprintf("Applied %d change(s) from cipi.yml to '%s'", applied, app)
+		} else {
+			r.Message = fmt.Sprintf("cipi.yml applied to '%s'", app)
+		}
+	case "unchanged":
+		r.OK = true
+		r.Message = fmt.Sprintf("Nothing to do — '%s' already matches cipi.yml", app)
+	case "partial":
+		r.Message = fmt.Sprintf("Applied %d change(s) to '%s', %d failed", applied, app, failed)
+		r.Details = append(r.Details, failures...)
+		r.Hint = fmt.Sprintf("See what is left: cipi-cli yml plan %s", app)
+	case "blocked":
+		r.Message = fmt.Sprintf("Nothing was applied to '%s' — resolve the blocking items first", app)
+		r.Details = append(r.Details, blockers...)
+	case "invalid":
+		r.Message = fmt.Sprintf("The cipi.yml of '%s' is not valid — nothing was applied", app)
+	case "no-file":
+		r.Message = fmt.Sprintf("No cipi.yml in the live release of '%s' — nothing to apply", app)
+		r.Hint = "Commit a cipi.yml at the root of the repository, deploy, then apply"
+	case "":
+		r.Message = fmt.Sprintf("cipi.yml apply on '%s' reported no outcome", app)
+	default:
+		r.Message = fmt.Sprintf("cipi.yml apply on '%s' ended as %s", app, outcome)
+	}
+	// errors carries the validation messages (invalid) or any other error text.
+	r.Details = append(r.Details, errs...)
+	return r
+}
+
+func ymlCount(v interface{}) int {
+	if f, ok := v.(float64); ok {
+		return int(f)
+	}
+	return 0
+}
+
+func ymlStrings(v interface{}) []string {
+	items, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if s := formatFieldValue(item); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}

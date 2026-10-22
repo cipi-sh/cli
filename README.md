@@ -1,6 +1,6 @@
 # cipi-cli
 
-Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, deployments, PHP, services, SMTP, healthchecks, and disk usage from the terminal.
+Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, deployments, PHP, services, SMTP, healthchecks, disk usage, and an app's `cipi.yml` from the terminal.
 
 ## Installation
 
@@ -152,6 +152,21 @@ cipi-cli deploy unlock <app>                Unlock a stuck deployment
 cipi-cli deploy config show|set <app>       Structured deploy.php options (5.0.3+)
 cipi-cli deploy audit <app> [--days N]      Deploy audit ledger (5.4.0+)
 ```
+
+### cipi.yml
+
+```
+cipi-cli yml <app>                          What applying the app's cipi.yml would change
+cipi-cli yml plan <app>                     Same (aliases: show, status, diff)
+cipi-cli yml apply <app> [-y]               Apply it (async job: preview + confirmation unless -y)
+cipi-cli yml auto <app> [on|off|status]     Apply after every successful deploy (default: status)
+```
+
+The `cipi.yml` an app ships in its repository describes the server state it expects (aliases, www redirect, basic auth, redirects, proxies, PHP version and settings, limits, extra databases, workers, healthcheck, deploy options, crons, backups, post-deploy steps); these commands mirror `cipi yml` on the host and read the file of the live release, so commit it and deploy first.
+
+`yml plan` prints the file, whether auto-apply is on, validation errors and warnings, the changes, the blockers (while any is listed, apply changes nothing) and what happens after the next deploy; it exits 1 when there is no file, it is not valid or something blocks the apply (`--json` prints the data and exits 0). `yml apply` previews the plan and asks before dispatching the `app-yml-apply` job (`-y` skips both), then prints the outcome — applied, unchanged, partial (with the failed changes), blocked, invalid or no-file — and exits 1 unless it is applied or unchanged; `--json` prints the job result as `{"data": …}`. `yml auto <app> on` covers CLI, panel and Git webhook deploys: anyone who can commit to the repository can then change the app's aliases, PHP settings, limits, workers, deploy recipe, scheduled commands, databases and backup schedule (for a Node app also its mode, Node version, build and start commands), so the CLI says so and asks for confirmation unless `-y` is passed.
+
+Requires Cipi 5.6.4+, API 1.35+ and the `yml-view` (plan, auto status) / `yml-manage` (apply, auto on|off) token abilities — existing tokens do not get them: create a token with them (`cipi api token create`). Cipi 5.6.4 is also the release that applies `cipi.yml` on Git webhook deploys when auto-apply is on.
 
 ### SSL
 
@@ -433,6 +448,7 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | Node apps / deploy audit | 5.4.0 | 1.31+ |
 | Disk usage (`disk`, `disk db`) | 5.5.2 (API sudoers) | 1.33+ |
 | `apps create --node-build`, repository access check on create/edit | 5.6.0 | 1.34+ |
+| cipi.yml (`yml plan`, `yml apply`, `yml auto`) | 5.6.4 | 1.35+ (`yml-view` / `yml-manage`) |
 | Anonymized dumps (`db anonymize`) | 5.0.3 | 1.14+ (plus cipi/agent 1.1.1+ in the app) |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |

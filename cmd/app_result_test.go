@@ -66,3 +66,83 @@ func TestDescribeRepositoryAccess(t *testing.T) {
 		}
 	})
 }
+
+func TestDescribeYmlApplyResult(t *testing.T) {
+	list := func(items ...string) []interface{} {
+		out := make([]interface{}, len(items))
+		for i, s := range items {
+			out[i] = s
+		}
+		return out
+	}
+
+	cases := []struct {
+		name    string
+		result  map[string]interface{}
+		ok      bool
+		message string
+		details []string
+		hint    bool
+	}{
+		{
+			name:    "applied",
+			result:  map[string]interface{}{"app": "shop", "outcome": "applied", "applied": float64(3), "failed": float64(0), "failures": list(), "blockers": list(), "errors": list()},
+			ok:      true,
+			message: "Applied 3 change(s) from cipi.yml to 'shop'",
+		},
+		{
+			name:    "unchanged",
+			result:  map[string]interface{}{"app": "shop", "outcome": "unchanged", "applied": float64(0)},
+			ok:      true,
+			message: "Nothing to do — 'shop' already matches cipi.yml",
+		},
+		{
+			name:    "partial",
+			result:  map[string]interface{}{"app": "shop", "outcome": "partial", "applied": float64(2), "failed": float64(1), "failures": list("add worker default")},
+			message: "Applied 2 change(s) to 'shop', 1 failed",
+			details: []string{"add worker default"},
+			hint:    true,
+		},
+		{
+			name:    "blocked",
+			result:  map[string]interface{}{"app": "shop", "outcome": "blocked", "blockers": list("PHP 8.5 is not installed — run: cipi php install 8.5")},
+			message: "Nothing was applied to 'shop' — resolve the blocking items first",
+			details: []string{"PHP 8.5 is not installed — run: cipi php install 8.5"},
+		},
+		{
+			name:    "invalid",
+			result:  map[string]interface{}{"app": "shop", "outcome": "invalid", "errors": list("line 4: unknown key 'phpp'", "line 9: workers must be a list")},
+			message: "The cipi.yml of 'shop' is not valid — nothing was applied",
+			details: []string{"line 4: unknown key 'phpp'", "line 9: workers must be a list"},
+		},
+		{
+			name:    "no-file uses the requested app name",
+			result:  map[string]interface{}{"outcome": "no-file"},
+			message: "No cipi.yml in the live release of 'myapp' — nothing to apply",
+			hint:    true,
+		},
+		{
+			name:    "missing outcome",
+			result:  map[string]interface{}{"app": "shop"},
+			message: "cipi.yml apply on 'shop' reported no outcome",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := describeYmlApplyResult(tc.result, "myapp")
+			if r.OK != tc.ok || r.Message != tc.message {
+				t.Fatalf("unexpected report: %+v", r)
+			}
+			if strings.Join(r.Details, "|") != strings.Join(tc.details, "|") {
+				t.Fatalf("details = %#v, want %#v", r.Details, tc.details)
+			}
+			if (r.Hint != "") != tc.hint {
+				t.Fatalf("hint = %q, want present=%v", r.Hint, tc.hint)
+			}
+			if got := ymlApplySucceeded(tc.result); got != tc.ok {
+				t.Fatalf("ymlApplySucceeded = %v, want %v", got, tc.ok)
+			}
+		})
+	}
+}
