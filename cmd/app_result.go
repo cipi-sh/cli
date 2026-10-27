@@ -27,6 +27,7 @@ func printAppCreateResult(result map[string]interface{}) {
 		output.KeyValue(nil, label, fmt.Sprintf("%s / %s", str(m, "user"), str(m, "password")))
 	}
 	field("Domain", "domain")
+	field("Environment", "env")
 	field("PHP", "php")
 	field("Home", "home")
 	pair("SSH", "ssh")

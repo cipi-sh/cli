@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/cipi-sh/cli/internal/api"
@@ -17,7 +18,7 @@ const ymlRequires = "cipi.yml over the API requires cipi/api 1.35+ and Cipi 5.6.
 // ymlAutoWarning is what turning auto-apply on hands over to the repository.
 var ymlAutoWarning = []string{
 	"With auto-apply on, anyone who can commit to the repository can change this app's",
-	"aliases, PHP settings, limits, workers, deploy recipe, scheduled commands,",
+	"aliases, PHP settings, limits, workers, deploy branch and recipe, scheduled commands,",
 	"databases and backup schedule — for a Node app also its mode, Node version,",
 	"build and start commands.",
 }
@@ -29,8 +30,12 @@ type ymlChange struct {
 
 // ymlPlanData is GET /api/apps/{name}/yml. File is nil when the live release
 // has no cipi.yml; Valid and InSync are nil when there is nothing to judge.
+// Env is the environment label of the app (Cipi 5.8.0+ / API 1.36+): the
+// server reads cipi-<env>.yml first and falls back to cipi.yml. Older servers
+// send none and read cipi.yml only.
 type ymlPlanData struct {
 	App      string      `json:"app"`
+	Env      string      `json:"env"`
 	File     *string     `json:"file"`
 	Auto     bool        `json:"auto"`
 	Valid    *bool       `json:"valid"`
@@ -45,6 +50,7 @@ type ymlPlanData struct {
 // ymlAutoData is the answer of POST /api/apps/{name}/yml/auto/enable|disable.
 type ymlAutoData struct {
 	App     string  `json:"app"`
+	Env     string  `json:"env"`
 	Auto    bool    `json:"auto"`
 	Sudoers bool    `json:"sudoers"`
 	File    *string `json:"file"`
@@ -63,7 +69,9 @@ steps. These commands mirror "cipi yml" on the host.
   cipi-cli yml apply <app> [-y]          apply it (async job)
   cipi-cli yml auto <app> on|off|status  apply after every successful deploy
 
-The file is read from the live release, so commit it and deploy first.
+The file is read from the live release, so commit it and deploy first. An app
+with an environment label (apps create --env staging) reads cipi-<env>.yml
+first and falls back to cipi.yml; plan shows the label and the file in use.
 plan exits with status 1 when there is no file, it is not valid or something
 blocks the apply; apply exits with status 1 unless the outcome is applied or
 unchanged.
@@ -91,7 +99,8 @@ var ymlPlanCmd = &cobra.Command{
 	Long: `Read the cipi.yml of the live release and show what applying it would change
 — "cipi yml plan" on the host, read from GET /api/apps/{name}/yml.
 
-Prints the file, whether auto-apply is on, validation errors and warnings, the
+Prints the environment label of the app and the file in use (cipi-<env>.yml,
+else cipi.yml), whether auto-apply is on, validation errors and warnings, the
 changes, what blocks the apply and what happens after the next deploy.
 
 Exits with status 1 when there is no file, it is not valid or something blocks
@@ -205,10 +214,10 @@ of the app — CLI deploy, panel deploy and Git webhook alike — or show whethe
 it is on ("cipi yml auto" on the host). Without on|off the status is shown.
 
 Turning it on means anyone who can commit to the repository can change the
-app's aliases, PHP settings, limits, workers, deploy recipe, scheduled
-commands, databases and backup schedule (for a Node app also its mode, Node
-version, build and start commands): the CLI says so and prompts for
-confirmation unless -y / --yes is passed.
+app's aliases, PHP settings, limits, workers, deploy branch and recipe,
+scheduled commands, databases and backup schedule (for a Node app also its
+mode, Node version, build and start commands): the CLI says so and prompts
+for confirmation unless -y / --yes is passed.
 
 on and off need the yml-manage ability, status needs yml-view.
 
@@ -259,13 +268,14 @@ on and off need the yml-manage ability, status needs yml-view.
 			if jsonFlag {
 				output.PrintJSON(map[string]interface{}{"data": map[string]interface{}{
 					"app":  plan.App,
+					"env":  envLabelOrDefault(plan.Env),
 					"auto": plan.Auto,
 					"file": plan.File,
 				}})
 				return nil
 			}
 			output.Header(fmt.Sprintf("cipi.yml for '%s'", app))
-			printYmlFileAndAuto(plan.File, plan.Auto, app)
+			printYmlFileAndAuto(plan.Env, plan.File, plan.Auto, app)
 			fmt.Println()
 			return nil
 		}
@@ -313,7 +323,7 @@ on and off need the yml-manage ability, status needs yml-view.
 				output.Warn("The sudoers rule is missing — webhook deploys skip cipi.yml; run again: cipi-cli yml auto %s on", app)
 			}
 			if data.File == nil {
-				output.Dim.Println("  No cipi.yml in the live release yet — the first deploy that ships one applies it.")
+				output.Dim.Printf("  No %s in the live release yet — the first deploy that ships one applies it.\n", ymlFileCandidates(data.Env))
 			}
 		} else {
 			output.Success("Automatic cipi.yml apply disabled for '%s'", app)
@@ -390,11 +400,11 @@ func ymlPlanProblem(plan *ymlPlanData) error {
 
 func printYmlPlan(plan *ymlPlanData) {
 	output.Header(fmt.Sprintf("cipi.yml for '%s'", plan.App))
-	printYmlFileAndAuto(plan.File, plan.Auto, plan.App)
+	printYmlFileAndAuto(plan.Env, plan.File, plan.Auto, plan.App)
 
 	if plan.File == nil {
 		fmt.Println()
-		output.Warn("No cipi.yml in the live release — commit one at the root of the repository and deploy")
+		output.Warn("No %s in the live release — commit one at the root of the repository and deploy", ymlFileCandidates(plan.Env))
 		output.Dim.Printf("  Start from the app as it is, on the host: cipi yml generate %s --save\n", plan.App)
 		fmt.Println()
 		return
@@ -438,11 +448,18 @@ func printYmlPlan(plan *ymlPlanData) {
 	}
 }
 
-func printYmlFileAndAuto(file *string, auto bool, app string) {
+// printYmlFileAndAuto prints the environment label of the app, the file the
+// server read for it and whether auto-apply is on.
+func printYmlFileAndAuto(env string, file *string, auto bool, app string) {
+	output.KeyValue(nil, "Environment", envLabelOrDefault(env))
 	if file != nil {
-		output.KeyValue(nil, "File", *file)
+		line := *file
+		if note := ymlFileNote(env, *file); note != "" {
+			line += " " + output.Dim.Sprintf("(%s)", note)
+		}
+		output.KeyValue(nil, "File", line)
 	} else {
-		output.KeyValue(nil, "File", output.Dim.Sprint("not present in the live release"))
+		output.KeyValue(nil, "File", output.Dim.Sprintf("not present in the live release (%s)", ymlFileCandidates(env)))
 	}
 	if auto {
 		output.KeyValue(nil, "Auto-apply", output.Green.Sprint("on — after every successful deploy (CLI, panel and webhook)"))
@@ -450,6 +467,24 @@ func printYmlFileAndAuto(file *string, auto bool, app string) {
 		output.KeyValue(nil, "Auto-apply", output.Dim.Sprint("off — deploys ignore the file"))
 		output.KeyValue(nil, "", output.Dim.Sprintf("turn it on: cipi-cli yml auto %s on", app))
 	}
+}
+
+// ymlFileCandidates names the files the server looks for, in order. A server
+// without environment labels sends no env and reads cipi.yml only.
+func ymlFileCandidates(env string) string {
+	if env == "" {
+		return "cipi.yml"
+	}
+	return fmt.Sprintf("cipi-%s.yml or cipi.yml", env)
+}
+
+// ymlFileNote flags a non-production app that is on the shared cipi.yml, so
+// a cipi-<env>.yml in the repository would take over. Empty otherwise.
+func ymlFileNote(env, file string) string {
+	if env == "" || env == "production" || path.Base(file) != "cipi.yml" {
+		return ""
+	}
+	return fmt.Sprintf("shared file — a cipi-%s.yml in the repository would take over", env)
 }
 
 func ymlList(title string, items []string, bullet string) {

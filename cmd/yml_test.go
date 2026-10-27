@@ -98,3 +98,41 @@ func TestYmlPlanProblem(t *testing.T) {
 		})
 	}
 }
+
+func TestYmlFileCandidates(t *testing.T) {
+	cases := map[string]string{
+		"":           "cipi.yml",
+		"production": "cipi-production.yml or cipi.yml",
+		"staging":    "cipi-staging.yml or cipi.yml",
+	}
+	for env, want := range cases {
+		if got := ymlFileCandidates(env); got != want {
+			t.Errorf("ymlFileCandidates(%q) = %q, want %q", env, got, want)
+		}
+	}
+}
+
+func TestYmlFileNote(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string
+		file string
+		want string // "" = no note, else a substring of it
+	}{
+		{"old server without labels", "", "/home/shop/current/cipi.yml", ""},
+		{"production on the shared file", "production", "/home/shop/current/cipi.yml", ""},
+		{"staging on its own file", "staging", "/home/shop/current/cipi-staging.yml", ""},
+		{"staging on the shared file", "staging", "/home/shop/current/cipi.yml", "cipi-staging.yml"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ymlFileNote(tc.env, tc.file)
+			switch {
+			case tc.want == "" && got != "":
+				t.Fatalf("unexpected note %q", got)
+			case tc.want != "" && !strings.Contains(got, tc.want):
+				t.Fatalf("note %q does not mention %q", got, tc.want)
+			}
+		})
+	}
+}

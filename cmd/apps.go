@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/cipi-sh/cli/internal/api"
@@ -11,6 +12,57 @@ import (
 )
 
 var appLogTypes = []string{"all", "nginx", "php", "worker", "deploy", "laravel"}
+
+// envLabelPattern is what an app environment label may look like (production,
+// staging, qa-1, …): 1 to 32 lowercase letters, digits, - or _, starting with
+// a letter or digit. The API enforces the same rule.
+var envLabelPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+
+// envRequires is what a server needs to know environment labels.
+const envRequires = "Cipi 5.8.0+ / API 1.36+"
+
+// validateEnvLabel rejects an environment label the API would refuse, with
+// the rule spelled out.
+func validateEnvLabel(label string) error {
+	if envLabelPattern.MatchString(label) {
+		return nil
+	}
+	return fmt.Errorf("invalid environment label %q — 1 to 32 lowercase letters, digits, - or _, starting with a letter or digit (e.g. production, staging)", label)
+}
+
+// envLabelOrDefault is the label to show: production when the server (before
+// environment labels) sends none.
+func envLabelOrDefault(env string) string {
+	if env == "" {
+		return "production"
+	}
+	return env
+}
+
+// appEnv is the environment label of an app object from the API.
+func appEnv(app map[string]interface{}) string {
+	env, _ := app["env"].(string)
+	return envLabelOrDefault(env)
+}
+
+// warnIfEnvDropped says when the server kept no environment label: servers
+// before environment labels accept the field and drop it. The job result is
+// trusted when it echoes the label; otherwise the app is read back.
+func warnIfEnvDropped(client *api.Client, app, want string, result map[string]interface{}) {
+	if got, ok := result["env"].(string); ok && got == want {
+		return
+	}
+	var fetched struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := client.Get(appAPIPath(app, ""), &fetched); err != nil {
+		output.Dim.Printf("  Could not read back the environment label: %s\n", err)
+		return
+	}
+	if got, _ := fetched.Data["env"].(string); got != want {
+		output.Warn("The server did not keep the environment label %q (needs %s) — the app stays %s", want, envRequires, appEnv(fetched.Data))
+	}
+}
 
 var appsCmd = &cobra.Command{
 	Use:     "apps",
@@ -70,10 +122,11 @@ var appsListCmd = &cobra.Command{
 		}
 
 		output.Header("Applications")
-		t := output.NewTable("APP", "DOMAIN", "PHP", "REPOSITORY", "BRANCH", "SUSPENDED")
+		t := output.NewTable("APP", "ENV", "DOMAIN", "PHP", "REPOSITORY", "BRANCH", "SUSPENDED")
 		for _, app := range result.Data {
 			t.Row(
 				str(app, "app"),
+				appEnv(app),
 				str(app, "domain"),
 				str(app, "php"),
 				truncate(str(app, "repository"), 40),
@@ -90,8 +143,8 @@ var appsListCmd = &cobra.Command{
 var appsShowCmd = &cobra.Command{
 	Use:   "show <name>",
 	Short: "Show application details",
-	Long: `Show domain, PHP version, repository, branch, aliases, and other details
-for one application.
+	Long: `Show domain, environment label, PHP version, repository, branch, aliases,
+and other details for one application.
 
   cipi-cli apps show myapp
   cipi-cli prod apps show myapp`,
@@ -122,6 +175,7 @@ for one application.
 		app := result.Data
 		output.Header(fmt.Sprintf("App: %s", str(app, "app")))
 		output.KeyValue(nil, "App", str(app, "app"))
+		output.KeyValue(nil, "Environment", appEnv(app))
 		output.KeyValue(nil, "Domain", str(app, "domain"))
 		output.KeyValue(nil, "PHP", str(app, "php"))
 		output.KeyValue(nil, "Repository", str(app, "repository"))
@@ -161,16 +215,26 @@ with npm, npx, yarn, pnpm, bun or node; && and ; are allowed, pipes,
 redirects, backticks and $( ) are not; 200 characters at most. Not for custom
 or Node apps (Node apps take --build). Requires Cipi 5.6.0+ / API 1.34+.
 
+--env labels the environment of the app: production (the default), staging or
+any 1-32 character label of lowercase letters, digits, - or _. The label is
+shown by apps list/show and selects the file the yml commands read:
+cipi-<env>.yml first, then cipi.yml. Requires Cipi 5.8.0+ / API 1.36+; older
+servers drop it and the CLI says so.
+
 When the job completes the CLI prints the new app's credentials, deploy key
 and webhook, and (Cipi 5.6.0+ / API 1.34+) whether the deploy key can read the
 repository.
 
   cipi-cli apps create
   cipi-cli apps create --user myapp --domain example.com --php 8.4 \
-    --repository git@github.com:org/repo.git --branch main`,
+    --repository git@github.com:org/repo.git --branch main
+  cipi-cli apps create --user shop-staging --domain staging.shop.com --php 8.4 \
+    --repository git@github.com:org/shop.git --branch develop --env staging`,
 	Example: `  cipi-cli apps create
   cipi-cli apps create --user myapp --domain example.com --php 8.4 \
     --repository git@github.com:org/repo.git --branch main
+  cipi-cli apps create --user shop-staging --domain staging.shop.com --php 8.4 \
+    --repository git@github.com:org/shop.git --branch develop --env staging
   cipi-cli apps create --user myapp --domain example.com --php 8.4 \
     --repository git@github.com:org/repo.git --branch main \
     --node-build "npm ci && npm run build"
@@ -178,6 +242,15 @@ repository.
   cipi-cli apps create --user web --domain web.com --node ssr --framework next \
     --repository git@github.com:org/web.git --branch main`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Refuse a bad label before touching the config or the server.
+		env, _ := cmd.Flags().GetString("env")
+		if env != "" {
+			if err := validateEnvLabel(env); err != nil {
+				output.Error("%s", err)
+				return err
+			}
+		}
+
 		client, err := api.NewClient()
 		if err != nil {
 			output.Error("%s", err)
@@ -292,6 +365,9 @@ repository.
 		if nodeBuild != "" {
 			body["node_build"] = nodeBuild
 		}
+		if env != "" {
+			body["env"] = env
+		}
 
 		output.Info("Creating app '%s'...", user)
 		job, err := client.DoAsyncAndWaitResult("POST", "/api/apps", body)
@@ -315,6 +391,9 @@ repository.
 				output.Warn("The server did not confirm the build command (needs Cipi 5.6.0+ / API 1.34+) — set it with: cipi-cli deploy config set %s --node-build %q", user, nodeBuild)
 			}
 		}
+		if env != "" {
+			warnIfEnvDropped(client, user, env, result)
+		}
 		fmt.Println()
 		return nil
 	},
@@ -323,22 +402,36 @@ repository.
 var appsEditCmd = &cobra.Command{
 	Use:   "edit <name>",
 	Short: "Edit an existing application",
-	Long: `Update PHP version, repository, branch, primary domain, and/or Node settings.
+	Long: `Update PHP version, repository, branch, primary domain, environment label,
+and/or Node settings.
 
-Pass at least one flag: --php, --repository, --branch, --domain, or a Node flag
-(--node, --node-version, --build, --start, --output, --health-path).
+Pass at least one flag: --php, --repository, --branch, --domain, --env, or a
+Node flag (--node, --node-version, --build, --start, --output, --health-path).
 --node-version also pins a Laravel app to a Node major ('default' unpins it).
+--env relabels the environment (production, staging, …; Cipi 5.8.0+ / API
+1.36+) and with it the cipi-<env>.yml the yml commands read.
 
 With Cipi 5.6.0+ / API 1.34+, changing --repository or --branch also reports
 whether the deploy key can read the repository (and the fix to run if not).
 
   cipi-cli apps edit myapp --php 8.4
-  cipi-cli apps edit myapp --branch develop --domain new.example.com`,
+  cipi-cli apps edit myapp --branch develop --domain new.example.com
+  cipi-cli apps edit myapp --env staging`,
 	Example: `  cipi-cli apps edit myapp --php 8.4
   cipi-cli apps edit myapp --repository git@github.com:org/repo.git --branch main
-  cipi-cli apps edit myapp --domain new.example.com`,
+  cipi-cli apps edit myapp --domain new.example.com
+  cipi-cli apps edit myapp --env staging`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Refuse a bad label before touching the config or the server.
+		env, _ := cmd.Flags().GetString("env")
+		if env != "" {
+			if err := validateEnvLabel(env); err != nil {
+				output.Error("%s", err)
+				return err
+			}
+		}
+
 		client, err := api.NewClient()
 		if err != nil {
 			output.Error("%s", err)
@@ -377,9 +470,12 @@ whether the deploy key can read the repository (and the fix to run if not).
 		if v, _ := cmd.Flags().GetString("health-path"); v != "" {
 			body["health_path"] = v
 		}
+		if env != "" {
+			body["env"] = env
+		}
 
 		if len(body) == 0 {
-			output.Error("No fields to update — use --php, --repository, --branch, --domain, or Node flags")
+			output.Error("No fields to update — use --php, --repository, --branch, --domain, --env, or Node flags")
 			return fmt.Errorf("no fields specified")
 		}
 
@@ -401,6 +497,9 @@ whether the deploy key can read the repository (and the fix to run if not).
 		// or branch changes; older servers report nothing here.
 		if ra, ok := result["repository_access"].(map[string]interface{}); ok {
 			printRepositoryAccess(ra, "next")
+		}
+		if env != "" {
+			warnIfEnvDropped(client, args[0], env, result)
 		}
 		fmt.Println()
 		return nil
@@ -742,6 +841,7 @@ func init() {
 	appsCreateCmd.Flags().String("output", "", "Node build output directory (spa/static)")
 	appsCreateCmd.Flags().String("health-path", "", "Node health path (SSR)")
 	appsCreateCmd.Flags().String("node-build", "", `Laravel asset build run inside every deploy, e.g. "npm ci && npm run build" (Cipi 5.6.0+ / API 1.34+; not for custom/Node apps)`)
+	appsCreateCmd.Flags().String("env", "", "environment label: production (default), staging, …")
 
 	appsEditCmd.Flags().String("php", "", "PHP version")
 	appsEditCmd.Flags().String("repository", "", "Git repository SSH URL")
@@ -753,6 +853,7 @@ func init() {
 	appsEditCmd.Flags().String("start", "", "Node start command (SSR)")
 	appsEditCmd.Flags().String("output", "", "Node build output directory")
 	appsEditCmd.Flags().String("health-path", "", "Node health path (SSR)")
+	appsEditCmd.Flags().String("env", "", "environment label: production (default), staging, …")
 
 	appsDeleteCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
 

@@ -105,7 +105,7 @@ cipi-cli deploy --help
 ### Apps
 
 ```
-cipi-cli apps list                          List all applications
+cipi-cli apps list                          List all applications (ENV column: environment label)
 cipi-cli apps show <name>                   Show application details
 cipi-cli apps create [flags]                Create a new application
 cipi-cli apps edit <name> [flags]           Edit an application
@@ -128,9 +128,11 @@ Alias: `app` → `apps`.
 
 **Create flags:** `--user`, `--domain`, `--php`, `--repository`, `--branch`, `--custom`, `--docroot`, `--engine`, `--octane`, `--node`, `--framework`, `--node-version`, `--build`, `--start`, `--output`, `--health-path` (Node apps take no `--php`), `--node-build` (Laravel apps only: the asset build run inside every deploy before go-live, e.g. `--node-build "npm ci && npm run build"`; must start with npm/npx/yarn/pnpm/bun/node, `&&` and `;` allowed, no pipes/redirects/backticks/`$( )`, max 200 chars; requires Cipi 5.6.0+ / API 1.34+). The interactive flow offers an optional build command prompt for Laravel apps.
 
+**Environments:** `--env` labels the environment of an app — `production` (the default), `staging` or any label of 1 to 32 lowercase letters, digits, `-` or `_` (`apps create --env staging`, `apps edit <name> --env staging`; the CLI rejects anything else before calling the server). `apps list` shows it in the ENV column and `apps show` as Environment (`production` when the server sends none), and it selects the file the `yml` commands read: `cipi-<env>.yml` first, then `cipi.yml`. Requires Cipi 5.8.0+ / API 1.36+; older servers drop the field, so after create/edit the CLI reads the app back and warns when the label did not stick.
+
 When the create job completes the CLI prints the app credentials (SSH, database), deploy key, webhook and build. With Cipi 5.6.0+ / API 1.34+, `apps create` and `apps edit --repository/--branch` also report whether the deploy key can read the repository: reachable (with the branch), reachable but the branch is missing, or not readable (the first deploy will fail; git's error and the fix command to run on the server are shown). Older servers report nothing. With `--json`, the job result is printed as `{"data": …}`, `repository_access` and `build` included.
 
-**Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+), plus Node flags above
+**Edit flags:** `--php`, `--repository`, `--branch`, `--domain` (rename primary domain; requires Cipi 4.6.2+ / API 1.9.0+), `--env` (environment label; requires Cipi 5.8.0+ / API 1.36+), plus Node flags above
 
 **Logs flags:** `--type` (default `all`: nginx, php, worker, deploy, laravel), `--page` (default `1` = most recent), `--per-page` (default `50`, max `1000`; requires API 1.11.9+)
 
@@ -162,9 +164,9 @@ cipi-cli yml apply <app> [-y]               Apply it (async job: preview + confi
 cipi-cli yml auto <app> [on|off|status]     Apply after every successful deploy (default: status)
 ```
 
-The `cipi.yml` an app ships in its repository describes the server state it expects (aliases, www redirect, basic auth, redirects, proxies, PHP version and settings, limits, extra databases, workers, healthcheck, deploy options, crons, backups, post-deploy steps); these commands mirror `cipi yml` on the host and read the file of the live release, so commit it and deploy first.
+The `cipi.yml` an app ships in its repository describes the server state it expects (aliases, www redirect, basic auth, redirects, proxies, PHP version and settings, limits, extra databases, workers, healthcheck, deploy options, crons, backups, post-deploy steps); these commands mirror `cipi yml` on the host and read the file of the live release, so commit it and deploy first. An app with an environment label (`apps create --env staging`) reads `cipi-<env>.yml` first and falls back to the shared `cipi.yml`, so one repository can ship a file per environment (Cipi 5.8.0+ / API 1.36+); `deploy.branch` in the file is the git branch the app deploys.
 
-`yml plan` prints the file, whether auto-apply is on, validation errors and warnings, the changes, the blockers (while any is listed, apply changes nothing) and what happens after the next deploy; it exits 1 when there is no file, it is not valid or something blocks the apply (`--json` prints the data and exits 0). `yml apply` previews the plan and asks before dispatching the `app-yml-apply` job (`-y` skips both), then prints the outcome — applied, unchanged, partial (with the failed changes), blocked, invalid or no-file — and exits 1 unless it is applied or unchanged; `--json` prints the job result as `{"data": …}`. `yml auto <app> on` covers CLI, panel and Git webhook deploys: anyone who can commit to the repository can then change the app's aliases, PHP settings, limits, workers, deploy recipe, scheduled commands, databases and backup schedule (for a Node app also its mode, Node version, build and start commands), so the CLI says so and asks for confirmation unless `-y` is passed.
+`yml plan` prints the environment label and the file in use (and says when a non-production app is on the shared `cipi.yml`), whether auto-apply is on, validation errors and warnings, the changes, the blockers (while any is listed, apply changes nothing) and what happens after the next deploy; it exits 1 when there is no file, it is not valid or something blocks the apply (`--json` prints the data and exits 0). `yml apply` previews the plan and asks before dispatching the `app-yml-apply` job (`-y` skips both), then prints the outcome — applied, unchanged, partial (with the failed changes), blocked, invalid or no-file — and exits 1 unless it is applied or unchanged; `--json` prints the job result as `{"data": …}`. `yml auto <app> on` covers CLI, panel and Git webhook deploys: anyone who can commit to the repository can then change the app's aliases, PHP settings, limits, workers, deploy branch and recipe, scheduled commands, databases and backup schedule (for a Node app also its mode, Node version, build and start commands), so the CLI says so and asks for confirmation unless `-y` is passed.
 
 Requires Cipi 5.6.4+, API 1.35+ and the `yml-view` (plan, auto status) / `yml-manage` (apply, auto on|off) token abilities — existing tokens do not get them: create a token with them (`cipi api token create`). Cipi 5.6.4 is also the release that applies `cipi.yml` on Git webhook deploys when auto-apply is on.
 
@@ -449,6 +451,7 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | Disk usage (`disk`, `disk db`) | 5.5.2 (API sudoers) | 1.33+ |
 | `apps create --node-build`, repository access check on create/edit | 5.6.0 | 1.34+ |
 | cipi.yml (`yml plan`, `yml apply`, `yml auto`) | 5.6.4 | 1.35+ (`yml-view` / `yml-manage`) |
+| Environment labels (`apps create/edit --env`, ENV column, `yml` env + file, `cipi-<env>.yml`) | 5.8.0 | 1.36+ |
 | Anonymized dumps (`db anonymize`) | 5.0.3 | 1.14+ (plus cipi/agent 1.1.1+ in the app) |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |
