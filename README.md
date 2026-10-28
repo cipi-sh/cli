@@ -320,6 +320,8 @@ cipi-cli run-commands                       List whitelisted app run binaries (5
 ```
 
 Alias: `job` → `jobs`.  
+
+`jobs show` and `jobs wait` need the ability the job was created under (cipi/api 1.36.1+): `deploy-manage` for a deploy, `dbs-manage` for a database password, `apps-create` for an app create, and so on. The token that queued a job can always read it; any other gets `404 Job not found`.
 Most write commands wait for jobs automatically; use these to inspect a job by ID.
 
 ### Search, Node, and host insights
