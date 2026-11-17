@@ -2,10 +2,12 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,6 +29,29 @@ type APIError struct {
 	ErrorText string              `json:"error,omitempty"`
 	Errors    map[string][]string `json:"errors,omitempty"`
 	Status    int                 `json:"-"`
+}
+
+// UnmarshalJSON accepts the two shapes of "errors" the API sends: Laravel
+// validation's field → list of messages, which is kept, and the backup
+// endpoints' field → message, which is dropped because "error" already
+// carries those messages joined.
+func (e *APIError) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Message   string          `json:"message"`
+		ErrorText string          `json:"error"`
+		Errors    json.RawMessage `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	e.Message, e.ErrorText, e.Errors = raw.Message, raw.ErrorText, nil
+	if len(raw.Errors) > 0 {
+		var fields map[string][]string
+		if json.Unmarshal(raw.Errors, &fields) == nil {
+			e.Errors = fields
+		}
+	}
+	return nil
 }
 
 func (e *APIError) Error() string {
@@ -89,6 +114,22 @@ type JobStatus struct {
 	Status string      `json:"status"`
 	Result interface{} `json:"result,omitempty"`
 	Error  string      `json:"error,omitempty"`
+	// Output is what the Cipi CLI printed on the server (finished jobs only).
+	Output string `json:"output,omitempty"`
+}
+
+// FailureMessage says why a job failed: its error, else the error the API
+// parsed out of the CLI output (result.error), else a generic message.
+func (j *JobStatus) FailureMessage() string {
+	if j.Error != "" {
+		return j.Error
+	}
+	if m, ok := j.Result.(map[string]interface{}); ok {
+		if msg, _ := m["error"].(string); msg != "" {
+			return msg
+		}
+	}
+	return "job failed"
 }
 
 func NewClient() (*Client, error) {
@@ -326,6 +367,42 @@ func (c *Client) Delete(path string, body interface{}, result interface{}) error
 	return c.parseResponse(resp, result)
 }
 
+// PostMultipart sends a multipart/form-data POST: the plain fields, then one
+// file part. ctx aborts the request (an interrupted upload, for instance).
+func (c *Client) PostMultipart(ctx context.Context, path string, fields map[string]string, fileField, fileName string, data []byte, result interface{}) error {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			return fmt.Errorf("encoding request: %w", err)
+		}
+	}
+	part, err := w.CreateFormFile(fileField, fileName)
+	if err != nil {
+		return fmt.Errorf("encoding request: %w", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		return fmt.Errorf("encoding request: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("encoding request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+path, &buf)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	return c.parseResponse(resp, result)
+}
+
 func (c *Client) DoAsync(method, path string, body interface{}) (*AsyncResponse, error) {
 	resp, err := c.request(method, path, body)
 	if err != nil {
@@ -365,11 +442,7 @@ func (c *Client) WaitForJob(jobID string) (*JobStatus, error) {
 			return job, nil
 		case "failed", "error":
 			s.Stop()
-			errMsg := job.Error
-			if errMsg == "" {
-				errMsg = "job failed"
-			}
-			return job, fmt.Errorf("%s", errMsg)
+			return job, fmt.Errorf("%s", job.FailureMessage())
 		}
 
 		interval := 2 * time.Second

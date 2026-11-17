@@ -712,6 +712,34 @@ func printAppExtras(app map[string]interface{}) {
 	if n := len(sliceVal(app, "proxies")); n > 0 {
 		output.KeyValue(nil, "Proxies", fmt.Sprintf("%d (cipi-cli proxies list %s)", n, str(app, "app")))
 	}
+	if dbs := appDatabases(app); len(dbs) > 0 {
+		output.KeyValue(nil, "Databases", strings.Join(dbs, ", "))
+	}
+}
+
+// appDatabases names the databases linked to an app with "db create --app"
+// or "db link" (Cipi 5.9.0+ / API 1.39+). An entry is a name, or an object
+// with the name and its engine.
+func appDatabases(app map[string]interface{}) []string {
+	var names []string
+	for _, item := range sliceVal(app, "databases") {
+		switch v := item.(type) {
+		case string:
+			if v != "" {
+				names = append(names, v)
+			}
+		case map[string]interface{}:
+			name, _ := v["name"].(string)
+			if name == "" {
+				continue
+			}
+			if engine, _ := v["engine"].(string); engine != "" {
+				name += " (" + engine + ")"
+			}
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func sliceVal(m map[string]interface{}, key string) []interface{} {

@@ -25,6 +25,9 @@ type statusSystem struct {
 	OS       string `json:"os"`
 	Uptime   string `json:"uptime"`
 	Cipi     string `json:"cipi"`
+	// API is the installed cipi/api release (sent by cipi/api 1.39.1+;
+	// "dev-main" on a branch build).
+	API string `json:"api,omitempty"`
 }
 
 type statusResources struct {
@@ -75,6 +78,9 @@ Requires the status-view ability on the API token.
   cipi-cli status              global overview — one row per profile
   cipi-cli status prod         full details for one server
   cipi-cli prod status         same, via profile prefix
+
+The API column / "Cipi API" line is the cipi/api release installed on the
+server; servers before cipi/api 1.39.1 do not report it.
 
 ` + multiServerTip,
 	Example: `  cipi-cli status
@@ -160,7 +166,7 @@ func runStatusGlobal() error {
 	}
 
 	output.Header("Servers")
-	t := output.NewTable("NAME", "IP", "CPU", "RAM", "HDD", "APPS", "SVC", "CIPI")
+	t := output.NewTable("NAME", "IP", "CPU", "RAM", "HDD", "APPS", "SVC", "CIPI", "API")
 	failed := 0
 	for _, r := range results {
 		label := r.Profile
@@ -170,7 +176,7 @@ func runStatusGlobal() error {
 		if !r.OK || r.Data == nil {
 			failed++
 			errMsg := compactError(r.Error)
-			t.Row(label, "—", "—", "—", "—", "—", errMsg, "—")
+			t.Row(label, "—", "—", "—", "—", "—", errMsg, "—", "—")
 			continue
 		}
 		d := r.Data
@@ -183,6 +189,7 @@ func runStatusGlobal() error {
 			fmt.Sprintf("%d", d.Apps),
 			servicesSummary(d.Services),
 			dash(d.System.Cipi),
+			dash(d.System.API),
 		)
 	}
 	t.Flush()
@@ -257,6 +264,9 @@ func printStatusDetail(profile, endpoint string, data *serverStatusData) {
 	output.KeyValue(nil, "OS", dash(data.System.OS))
 	output.KeyValue(nil, "Uptime", dash(data.System.Uptime))
 	output.KeyValue(nil, "Cipi", dash(data.System.Cipi))
+	if data.System.API != "" {
+		output.KeyValue(nil, "Cipi API", data.System.API)
+	}
 	output.KeyValue(nil, "CPU", formatCPU(data.Resources.CPU))
 	output.KeyValue(nil, "RAM", formatMem(data.Resources.Memory))
 	output.KeyValue(nil, "HDD", formatDisk(data.Resources.Disk))

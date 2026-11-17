@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cipi-sh/cli/internal/api"
 	"github.com/cipi-sh/cli/internal/output"
@@ -177,4 +180,56 @@ func apiErrorHint(err error, minVersion, feature string) string {
 		return msg
 	}
 	return err.Error()
+}
+
+// featureErrorHint explains why an endpoint of a recent cipi/api refused: a
+// 403 names the ability the token lacks (abilities added by a release are not
+// on the tokens created before it), a missing route names the cipi/api release
+// that added it. Anything else is passed through — a 503 from an older Cipi
+// already says which version it needs.
+func featureErrorHint(err error, minAPI, ability string) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+
+	var apiErr *api.APIError
+	isAPIErr := errors.As(err, &apiErr)
+	switch {
+	case isHTTPStatus(err, 403):
+		return fmt.Sprintf("%s — the API token lacks the %s ability (existing tokens do not get new abilities: create one on the server with cipi api token create, or a full-access one with --full-access on Cipi 5.9.0+)", msg, ability)
+	case isAPIErr && apiErr.IsRouteNotFound(), !isAPIErr && strings.Contains(msg, "HTTP 404"):
+		return fmt.Sprintf("%s — update cipi/api to %s+ on the server (cipi api update)", msg, minAPI)
+	}
+	return msg
+}
+
+// formatSeconds prints a duration in seconds as 45s, 1m35s, 1h2m3s.
+func formatSeconds(seconds int64) string {
+	if seconds < 0 {
+		return "—"
+	}
+	return (time.Duration(seconds) * time.Second).String()
+}
+
+var ansiColors = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// cliOutputLines is what the Cipi CLI printed on the server, without colors
+// and blank lines.
+func cliOutputLines(text string) []string {
+	var lines []string
+	for _, line := range strings.Split(ansiColors.ReplaceAllString(text, ""), "\n") {
+		line = strings.TrimRight(line, " \t\r")
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+// printCLIOutput prints the server-side CLI output of a job or a command.
+func printCLIOutput(text string) {
+	for _, line := range cliOutputLines(text) {
+		fmt.Printf("  %s\n", line)
+	}
 }

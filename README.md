@@ -1,6 +1,6 @@
 # cipi-cli
 
-Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, SSL certificates, deployments, PHP, services, SMTP, healthchecks, disk usage, and an app's `cipi.yml` from the terminal.
+Command-line interface for [Cipi](https://cipi.sh) — manage servers, apps, databases, backups, SSL certificates, deployments, PHP and Node runtimes, services, SMTP, healthchecks, disk usage, and an app's `cipi.yml` from the terminal.
 
 ## Installation
 
@@ -149,11 +149,18 @@ For managing aliases on one app, see **Aliases** below.
 
 ```
 cipi-cli deploy <app>                       Trigger a deployment
+cipi-cli deploy status <app> [--tail N]     Running, queued or interrupted + the last run (5.8.4+)
+cipi-cli deploy history <app> [--limit N]   Every recorded run of one app, newest first (5.9.0+)
+cipi-cli deploy last                        The last run of every app (5.9.0+)
 cipi-cli deploy rollback <app> [-y]         Rollback to previous release
 cipi-cli deploy unlock <app>                Unlock a stuck deployment
 cipi-cli deploy config show|set <app>       Structured deploy.php options (5.0.3+)
 cipi-cli deploy audit <app> [--days N]      Deploy audit ledger (5.4.0+)
 ```
+
+`deploy status` says whether a deploy is running (with its phase, trigger, branch and how long ago it started), queued behind another one, or interrupted — a run that never ended with nothing running it, in which case the CLI points at `deploy unlock` — and prints the last finished run (result, release, duration, trigger, branch). `--tail N` adds the last N lines of the deploy log (max 500). Requires Cipi 5.8.4+ / API 1.37+ and the `deploy-manage` ability.
+
+`deploy history` lists the recorded runs of one app (`--limit`, default 30, max 500) and `deploy last` the last run of every app, `never deployed` for an app without one. Both require Cipi 5.9.0+ / API 1.39+; `deploy history` needs `deploy-manage`, `deploy last` needs `apps-view` or `deploy-manage`.
 
 ### cipi.yml
 
@@ -215,11 +222,15 @@ Alias: `alias` → `aliases`.
 ```
 cipi-cli db engines                         List DB engines + default (4.8+)
 cipi-cli db install <engine>                Install an engine: mariadb|pgsql (5.0.6+)
-cipi-cli db list                            List all databases
-cipi-cli db create <name> [--engine]        Create a database
+cipi-cli db list                            List all databases (engine, size, app)
+cipi-cli db create <name> [--engine] [--app] Create a database, optionally shown as an app's
+cipi-cli db link <database> <app>           Tie a database to an app (5.9.0+)
+cipi-cli db unlink <database>               Remove that tie (5.9.0+)
 cipi-cli db delete <name> [-y]              Delete a database (API < 1.19 only)
-cipi-cli db backup <name>                   Create a backup
-cipi-cli db restore <name> [-y]             Restore from backup
+cipi-cli db backup <name>                   Create a backup; prints the dump file on the server
+cipi-cli db restore <name> --file <path>    Restore from a .sql.gz on the server [-y]
+cipi-cli db restore <name> --upload <file>  Upload a local .sql / .sql.gz and restore it [-y] (5.9.0+)
+cipi-cli db upload-limits                   Largest dump, chunk size and extensions the server takes (5.9.0+)
 cipi-cli db password <name> [-y]            Regenerate password and update .env
 cipi-cli db anonymize <app> --email <addr>  Request an anonymized dump via cipi/agent
 cipi-cli db anonymize download <url> [-o F] Download the dump from the signed link
@@ -227,6 +238,10 @@ cipi-cli db anonymize download <url> [-o F] Download the dump from the signed li
 
 Aliases: `database`, `dbs` → `db`.  
 API 1.19+ removed database deletion and setting the default engine: use `cipi db delete` / `cipi db default` on the host.
+
+**App link:** `db create --app <app>` and `db link <database> <app>` show a database as an app's — `db list` gets an APP column (`shop (own)` for the app's own database, `shop (linked)` for a linked one) and `apps show` a Databases line. It is a label: the database keeps its own user and password and stays when the app is deleted; a database is linked to one app at most, and `db unlink` removes the tie. `--engine` picks the engine when the name exists on both. Requires Cipi 5.9.0+ / API 1.39+ and `dbs-manage`; on an older server `--app` is dropped, so after `db create --app` the CLI reads the list back and warns when the label did not stick.
+
+**Restore:** `db restore` needs exactly one of `--file` (a `.sql.gz` already on the server, e.g. the file `db backup` printed) or `--upload` (a local `.sql` or `.sql.gz`). An upload is sent in chunks with a progress indicator, restored, and deleted on the server when the restore ends; a chunk that fails on a network or server error is sent again up to three times, and Ctrl-C cancels the upload on the server. The size limit is the server's (`db upload-limits`, 2 GB unless configured otherwise) — copy a larger dump to the server and use `--file`. The content must match the name: a `.sql.gz` must be gzip-compressed, a `.sql` must not. `--upload` requires Cipi 5.9.0+ / API 1.39+.
 
 #### Anonymized dumps (cipi/agent)
 
@@ -246,6 +261,31 @@ cipi-cli db anonymize download "<signed url>" -o - | mysql -u root myapp_local
 
 **Anonymize flags:** `--email` / `-e` (prompted if omitted), `--url` (override the app base URL, e.g. when the app redirects to `www`), `--token` (override the bearer token)  
 **Download flags:** `--output` / `-o` (`-` for stdout), `--force` / `-f` (overwrite)
+
+### Backups
+
+```
+cipi-cli backup                             Status (same as backup status)
+cipi-cli backup status                      Destinations, profiles, last runs, what no profile covers
+cipi-cli backup runs [--profile P]          The runs each destination holds, per profile
+cipi-cli backup run [profile]               Start a run now, in the background
+cipi-cli backup verify [profile]            Check that the newest run opens (async job)
+cipi-cli backup profile add <name> --dest local,s3 [flags]
+cipi-cli backup profile edit <name> [flags]
+cipi-cli backup profile enable|disable <name>
+cipi-cli backup profile remove <name> [-y]
+cipi-cli backup destination test [name]     List each S3 destination with its credentials; exits 1 when one fails
+```
+
+Aliases: `backups` → `backup`, `profiles` → `profile`, `destinations` / `dest` → `destination`, `backup list` → `backup runs`.
+
+The server backups of `cipi backup` on the host. A profile says what a run takes, when, where to and for how long it is kept; `backup status` shows each profile with its schedule, retention, last run and state (enabled, disabled, overdue, running), the reason of a failed run, and the apps and databases no enabled profile covers. `backup run` only starts the run — follow it with `backup status`. `backup verify` waits for the job and prints what the server reported.
+
+**Profile flags:** `--scope all|files|db`, `--apps`, `--databases`, `--exclude-databases`, `--exclude-tables` (comma-separated names or globs, e.g. `--exclude-tables "*.jobs,*.sessions"`), `--every 30m|6h|1d` or `--cron "0 2 * * *"` (not both), `--dest local,s3,<named>` (required on `add`), `--keep`, `--keep-days`, `--keep-weeks`, `--encrypt` (client-side AES-256; `--encrypt=false` turns it off). `profile edit` sends only the flags you pass; an empty exclusion list (`--exclude-tables ""`) clears it. The three `--keep` flags are one retention policy: giving any of them sets the others to 0, so pass together the ones you want.
+
+Destinations are read-only here: adding one takes an S3 secret key, so `cipi backup configure` and `cipi backup destination add|edit|remove` are run on the server, as are fetch, key, prune and `profile remove --purge`.
+
+Requires Cipi 5.9.0+, API 1.39+ and the `backups-view` (status, runs) / `backups-manage` (everything else) token abilities — existing tokens do not get them.
 
 ### PHP
 
@@ -298,7 +338,8 @@ cipi-cli status <profile>                   Full details for one server
 cipi-cli <profile> status                   Same, via profile prefix
 ```
 
-Global columns: NAME, IP, CPU, RAM, HDD, APPS, SVC, CIPI.  
+Global columns: NAME, IP, CPU, RAM, HDD, APPS, SVC, CIPI, API.  
+API is the installed cipi/api release (`Cipi API` in the detail view); servers on cipi/api older than 1.39.1 do not report it and show `—`.  
 Requires the API token ability `status-view` (`GET /api/status`, same data as `cipi status` on the host).
 
 ### Disk
@@ -322,17 +363,23 @@ cipi-cli run-commands                       List whitelisted app run binaries (5
 Alias: `job` → `jobs`.  
 
 `jobs show` and `jobs wait` need the ability the job was created under (cipi/api 1.36.1+): `deploy-manage` for a deploy, `dbs-manage` for a database password, `apps-create` for an app create, and so on. The token that queued a job can always read it; any other gets `404 Job not found`.
-Most write commands wait for jobs automatically; use these to inspect a job by ID.
+Most write commands wait for jobs automatically; use these to inspect a job by ID. When a job fails, the CLI prints the reason the server recorded; with `--json`, `jobs show` and `jobs wait` include the job's `output` when the server sends it.
 
 ### Search, Node, and host insights
 
 ```
 cipi-cli search status                      Meilisearch status (5.2.2+)
 cipi-cli node list                          Installed Node runtimes (5.4.0+)
+cipi-cli node install <major>               Install a Node major, e.g. 24 (5.9.0+)
+cipi-cli node upgrade [major] [--restart]   Latest patch of one major, or of every installed one (5.9.0+)
+cipi-cli node default <major|system>        Set the server-wide Node (5.9.0+)
+cipi-cli node remove <major> [-y]           Remove a Node major (5.9.0+)
 cipi-cli monitor                            System monitor checks (5.3.0+)
 cipi-cli packages                           Optional host packages catalog
 cipi-cli zt                                 Cloudflare Zero Trust status (5.3.0+)
 ```
+
+`node install|upgrade|default|remove` are async jobs and take even (LTS) majors only — the CLI rejects anything else before calling the server. `node upgrade --restart` moves the SSR apps on the upgraded runtime to the new binary blue/green; without it they take it at their next deploy. Requires Cipi 5.9.0+, API 1.39+ and the `node-runtimes-manage` ability — existing tokens do not get it.
 
 ### IP whitelist
 
@@ -435,6 +482,8 @@ cipi api token create
 
 See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for details.
 
+A token only has the abilities it was created with: a feature added later (backups, Node runtimes, …) answers `403` until you create a new token that includes its ability. On Cipi 5.9.0+ `cipi api token create --full-access` creates a token with every ability, present and future.
+
 | Feature | Minimum Cipi | Minimum API |
 | --- | --- | --- |
 | Suspend / unsuspend | 4.5.8 | 1.8.1 |
@@ -454,6 +503,13 @@ See the [Cipi API documentation](https://cipi.sh/docs/advanced#cipi-api) for det
 | `apps create --node-build`, repository access check on create/edit | 5.6.0 | 1.34+ |
 | cipi.yml (`yml plan`, `yml apply`, `yml auto`) | 5.6.4 | 1.35+ (`yml-view` / `yml-manage`) |
 | Environment labels (`apps create/edit --env`, ENV column, `yml` env + file, `cipi-<env>.yml`) | 5.8.0 | 1.36+ |
+| Deploy status (`deploy status`) | 5.8.4 | 1.37+ |
+| Deploy history (`deploy history`, `deploy last`) | 5.9.0 | 1.39+ |
+| Node runtimes (`node install`, `upgrade`, `default`, `remove`) | 5.9.0 | 1.39+ (`node-runtimes-manage`) |
+| Backups (`backup …`) | 5.9.0 | 1.39+ (`backups-view` / `backups-manage`) |
+| Database app link (`db create --app`, `db link`, `db unlink`, APP column) | 5.9.0 | 1.39+ |
+| Dump upload (`db restore --upload`, `db upload-limits`) | 5.9.0 | 1.39+ |
+| API release in `status` (API column, `Cipi API`) | — | 1.39.1+ |
 | Anonymized dumps (`db anonymize`) | 5.0.3 | 1.14+ (plus cipi/agent 1.1.1+ in the app) |
 | App logs (`apps logs`) | — | 1.11.9 |
 | Server status (`status`) | — | with `GET /api/status` + `status-view` |

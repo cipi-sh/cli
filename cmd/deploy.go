@@ -21,6 +21,9 @@ Waits for the async job to finish before returning.
 Subcommands:
   cipi-cli deploy rollback myapp   previous release
   cipi-cli deploy unlock myapp     clear a stuck deploy lock
+  cipi-cli deploy status myapp     is a deploy running now (whoever started it)
+  cipi-cli deploy history myapp    past deploys with their duration
+  cipi-cli deploy last             the last deploy of every app
   cipi-cli deploy config show myapp
   cipi-cli deploy audit myapp
 
@@ -28,7 +31,10 @@ Subcommands:
 	Example: `  cipi-cli deploy myapp
   cipi-cli prod deploy myapp
   cipi-cli deploy rollback myapp
-  cipi-cli deploy unlock myapp`,
+  cipi-cli deploy unlock myapp
+  cipi-cli deploy status myapp --tail 40
+  cipi-cli deploy history myapp
+  cipi-cli deploy last`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewClient()
