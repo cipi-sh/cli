@@ -32,6 +32,11 @@ var phpListCmd = &cobra.Command{
 	Long: `List installed PHP versions with FPM status, apps per version, and the
 server default, plus the versions that can be installed.
 
+A server installed before Cipi 4.5.4 can still have PHP 7.4-8.2. They are
+listed and marked legacy: the apps on them keep running and can be moved to
+a current version ('apps edit <app> --php 8.5'), no app can be created on or
+moved to one, and removing one is host-only ('cipi php remove').
+
   cipi-cli php list
   cipi-cli prod php list`,
 	Example: `  cipi-cli php list
@@ -55,8 +60,16 @@ server default, plus the versions that can be installed.
 			return nil
 		}
 
+		installable := []string{}
+		if list, ok := result.Data["installable"].([]interface{}); ok {
+			for _, v := range list {
+				installable = append(installable, fmt.Sprintf("%v", v))
+			}
+		}
+
 		output.Header("PHP versions")
 		versions, _ := result.Data["versions"].([]interface{})
+		legacy := []string{}
 		if len(versions) == 0 {
 			output.Warn("No PHP versions installed")
 		} else {
@@ -70,18 +83,22 @@ server default, plus the versions that can be installed.
 				if b, _ := v["default"].(bool); b {
 					def = output.Green.Sprint("✓")
 				}
-				t.Row(str(v, "version"), colorStatus(str(v, "status")), str(v, "apps"), def)
+				version := str(v, "version")
+				if isLegacyPHP(version, installable) {
+					legacy = append(legacy, version)
+					version += " (legacy)"
+				}
+				t.Row(version, colorStatus(str(v, "status")), str(v, "apps"), def)
 			}
 			t.Flush()
 		}
 
 		output.KeyValue(nil, "Default", str(result.Data, "default"))
-		if installable, ok := result.Data["installable"].([]interface{}); ok && len(installable) > 0 {
-			parts := make([]string, 0, len(installable))
-			for _, v := range installable {
-				parts = append(parts, fmt.Sprintf("%v", v))
-			}
-			output.KeyValue(nil, "Installable", strings.Join(parts, ", "))
+		if len(installable) > 0 {
+			output.KeyValue(nil, "Installable", strings.Join(installable, ", "))
+		}
+		if len(legacy) > 0 {
+			output.KeyValue(nil, "Legacy", strings.Join(legacy, ", ")+" — apps on them keep running; no app can be created on or moved to one")
 		}
 		fmt.Println()
 		return nil
@@ -93,7 +110,8 @@ var phpInstallCmd = &cobra.Command{
 	Short: "Install a PHP version (async job)",
 	Long: `Install a PHP version with FPM and the standard extensions.
 
-Allowed versions are 8.3, 8.4, and 8.5. The job can take a few minutes.
+Allowed versions are 8.3, 8.4, 8.5, and 8.6 (8.6 needs Cipi 5.9.1+ and
+API 1.39.2+ on the server). The job can take a few minutes.
 
   cipi-cli php install 8.5
   cipi-cli prod php install 8.4`,
@@ -116,6 +134,22 @@ Allowed versions are 8.3, 8.4, and 8.5. The job can take a few minutes.
 		fmt.Println()
 		return nil
 	},
+}
+
+// isLegacyPHP reports whether an installed version is one Cipi no longer
+// installs or gives to an app: older than everything the server lists as
+// installable (7.4-8.2 on a server set up before Cipi 4.5.4). Without that
+// list nothing is called legacy.
+func isLegacyPHP(version string, installable []string) bool {
+	if parseVersion(version) == nil || len(installable) == 0 {
+		return false
+	}
+	for _, v := range installable {
+		if parseVersion(v) != nil && compareVersions(version, v) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func init() {

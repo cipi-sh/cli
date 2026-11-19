@@ -290,7 +290,7 @@ repository.
 		}
 		// Node apps refuse a PHP version (Cipi 5.4.0+).
 		if php == "" && nodeMode == "" {
-			php = prompt("PHP version (8.3/8.4/8.5)")
+			php = prompt("PHP version (8.3/8.4/8.5/8.6)")
 		}
 		if repository == "" && !custom {
 			repository = prompt("Git repository SSH URL")
@@ -854,7 +854,7 @@ func truncate(s string, max int) string {
 func init() {
 	appsCreateCmd.Flags().String("user", "", "App username")
 	appsCreateCmd.Flags().String("domain", "", "Domain name")
-	appsCreateCmd.Flags().String("php", "", "PHP version (8.3/8.4/8.5)")
+	appsCreateCmd.Flags().String("php", "", "PHP version (8.3/8.4/8.5/8.6)")
 	appsCreateCmd.Flags().String("repository", "", "Git repository SSH URL")
 	appsCreateCmd.Flags().String("branch", "", "Git branch")
 	appsCreateCmd.Flags().Bool("custom", false, "Create as custom app (non-Laravel)")

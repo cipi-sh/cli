@@ -160,7 +160,7 @@ cipi-cli deploy audit <app> [--days N]      Deploy audit ledger (5.4.0+)
 
 `deploy status` says whether a deploy is running (with its phase, trigger, branch and how long ago it started), queued behind another one, or interrupted — a run that never ended with nothing running it, in which case the CLI points at `deploy unlock` — and prints the last finished run (result, release, duration, trigger, branch). `--tail N` adds the last N lines of the deploy log (max 500). Requires Cipi 5.8.4+ / API 1.37+ and the `deploy-manage` ability.
 
-`deploy history` lists the recorded runs of one app (`--limit`, default 30, max 500) and `deploy last` the last run of every app, `never deployed` for an app without one. Both require Cipi 5.9.0+ / API 1.39+; `deploy history` needs `deploy-manage`, `deploy last` needs `apps-view` or `deploy-manage`.
+`deploy history` lists the recorded runs of one app (`--limit`, default 30, max 500) and `deploy last` the last run of every app, `never deployed` for an app without one. Both require Cipi 5.9.0+ / API 1.39+ and the `apps-view` or `deploy-manage` ability.
 
 ### cipi.yml
 
@@ -291,10 +291,12 @@ Requires Cipi 5.9.0+, API 1.39+ and the `backups-view` (status, runs) / `backups
 
 ```
 cipi-cli php list                           Installed versions, FPM status, default (5.0.6+)
-cipi-cli php install <version>              Install PHP 8.3 / 8.4 / 8.5
+cipi-cli php install <version>              Install PHP 8.3 / 8.4 / 8.5 / 8.6
 ```
 
 Switching the default PHP version and removing versions are host-only (`cipi php switch|remove`).
+
+A server installed before Cipi 4.5.4 can still have PHP 7.4–8.2. `php list` shows them marked `(legacy)`: the apps on them keep running and can be moved to a current version (`apps edit <app> --php 8.5`), and no app can be created on or moved to one — the API answers `422`.
 
 ### Server services & SSH keys
 
@@ -516,7 +518,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
 | Aliases add/remove path | — | 1.31+ (`/aliases/{domain}`) |
 
-New app PHP versions must be **8.3**, **8.4**, or **8.5** (Cipi 4.5.4+).
+New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
 ## License
 
