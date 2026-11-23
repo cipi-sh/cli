@@ -341,6 +341,24 @@ cipi-cli health unset <app>                 Disable
 cipi-cli health check <app>                 Run now; exits 1 when unhealthy
 ```
 
+### Metrics & health history
+
+Cipi 5.11.0+ with cipi/api 1.41.0+ (abilities `metrics-view`, `metrics-manage`).
+
+```bash
+cipi-cli metrics                                  Server and apps now, last-hour trend, uptime 24h/30d, recent events
+cipi-cli metrics show [--app shop] [--metrics cpu,mem_mb] [--range 7d]
+cipi-cli metrics uptime [shop] [--range 30d]      Uptime, minutes down, incidents, per day
+cipi-cli metrics events [--app] [--source deploy] [--range 7d] [--limit 50]
+cipi-cli metrics settings                         Collector, database, retention, heartbeat, OpenMetrics
+cipi-cli metrics retention --raw 7 --rollup 30 --resolution 15 --events 90
+cipi-cli metrics probe on|off                     Probe each app's healthcheck URL every minute
+cipi-cli metrics collector on|off
+cipi-cli metrics heartbeat set <url> [--every 1]  An outside service alerts when the calls stop
+cipi-cli metrics heartbeat off|test
+cipi-cli apps basicauth agent <app> [public|protected]   cipi/agent routes outside basic auth or not
+```
+
 ### Status
 
 ```
