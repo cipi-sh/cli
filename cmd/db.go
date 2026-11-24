@@ -50,6 +50,10 @@ var dbEnginesCmd = &cobra.Command{
 	Short:   "List installed database engines",
 	Long: `List installed database engines and the server default.
 
+On a server where "cipi db switch mysql" replaced MariaDB with MySQL (Cipi
+5.13.0+, run on the server only), the engine is still called mariadb — the
+name every command takes — and SERVER says mysql (cipi/api 1.43+).
+
 Requires Cipi 4.8+.
 
   cipi-cli db engines
@@ -64,7 +68,7 @@ Requires Cipi 4.8+.
 		}
 
 		var result struct {
-			Data map[string]interface{} `json:"data"`
+			Data dbEnginesData `json:"data"`
 		}
 		if err := client.Get("/api/dbs/engines", &result); err != nil {
 			output.Error("Failed to list database engines: %s", apiErrorHint(err, "4.8", "dbs-view"))
@@ -77,7 +81,7 @@ Requires Cipi 4.8+.
 		}
 
 		output.Header("Database engines")
-		printDataWrapper(result.Data)
+		printDBEngines(result.Data)
 		return nil
 	},
 }
@@ -639,4 +643,42 @@ func init() {
 
 	dbCmd.AddCommand(dbEnginesCmd, dbInstallCmd, dbListCmd, dbCreateCmd, dbDeleteCmd, dbLinkCmd, dbUnlinkCmd, dbBackupCmd, dbRestoreCmd, dbUploadLimitsCmd, dbPasswordCmd)
 	rootCmd.AddCommand(dbCmd)
+}
+
+// dbEnginesData is GET /api/dbs/engines. server and label: cipi/api 1.43+.
+type dbEnginesData struct {
+	Default *string `json:"default"`
+	Engines []struct {
+		Engine  string `json:"engine"`
+		Status  string `json:"status"`
+		Port    *int   `json:"port"`
+		Default bool   `json:"default"`
+		Server  string `json:"server,omitempty"`
+		Label   string `json:"label,omitempty"`
+	} `json:"engines"`
+}
+
+func printDBEngines(data dbEnginesData) {
+	if len(data.Engines) == 0 {
+		output.Warn("No database engine is installed")
+		return
+	}
+	t := output.NewTable("ENGINE", "SERVER", "STATUS", "PORT", "DEFAULT")
+	for _, e := range data.Engines {
+		server := e.Label
+		if server == "" {
+			server = map[string]string{"mariadb": "MariaDB", "pgsql": "PostgreSQL"}[e.Engine]
+		}
+		port := "—"
+		if e.Port != nil {
+			port = fmt.Sprint(*e.Port)
+		}
+		def := ""
+		if e.Default || (data.Default != nil && *data.Default == e.Engine) {
+			def = output.Green.Sprint("✓")
+		}
+		t.Row(e.Engine, dash(server), e.Status, port, def)
+	}
+	t.Flush()
+	fmt.Println()
 }

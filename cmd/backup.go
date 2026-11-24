@@ -50,7 +50,9 @@ type backupProfile struct {
 		Weeks int `json:"weeks"`
 	} `json:"retention"`
 	Encrypt bool `json:"encrypt"`
-	Covers  struct {
+	// ExcludePaths are left out of the app archives (Cipi 5.13.0+).
+	ExcludePaths []string `json:"exclude_paths"`
+	Covers       struct {
 		Apps      []string         `json:"apps"`
 		Databases []backupDatabase `json:"databases"`
 	} `json:"covers"`
@@ -322,6 +324,10 @@ const backupProfileFlagsHelp = `What a run takes:
   --databases shop,tenant_*     database names or globs
   --exclude-databases a,b       databases to leave out
   --exclude-tables "*.jobs"     db.table globs to leave out
+  --exclude-paths storage/app/uploads,*.mp4
+                                paths left out of the app archives, relative
+                                to the app; shop:storage/app/uploads for one
+                                app only (Cipi 5.13.0+, cipi/api 1.43+)
 
 When:
   --every 30m|6h|1d             an interval — or
@@ -393,13 +399,14 @@ var backupProfileEditCmd = &cobra.Command{
 	Short:   "Change a backup profile",
 	Long: `Change a backup profile ("cipi backup profile edit" on the host): only
 the flags passed change. An empty exclusion list clears it
-(--exclude-databases "" or --exclude-tables "").
+(--exclude-databases "", --exclude-tables "" or --exclude-paths "").
 
 ` + backupProfileFlagsHelp + `
 
   cipi-cli backup profile edit daily --every 12h
   cipi-cli backup profile edit daily --keep 14 --keep-weeks 8
-  cipi-cli backup profile edit daily --exclude-tables ""`,
+  cipi-cli backup profile edit daily --exclude-tables ""
+  cipi-cli backup profile edit daily --exclude-paths storage/app/uploads`,
 	Example: `  cipi-cli backup profile edit daily --every 12h
   cipi-cli backup profile edit daily --keep 14 --keep-weeks 8
   cipi-cli prod backup profile edit daily --exclude-tables "*.jobs,*.sessions"`,
@@ -678,6 +685,7 @@ func backupProfileBody(cmd *cobra.Command) map[string]interface{} {
 		"databases":         "databases",
 		"exclude-databases": "exclude_databases",
 		"exclude-tables":    "exclude_tables",
+		"exclude-paths":     "exclude_paths",
 		"dest":              "destinations",
 	} {
 		if flags.Changed(flag) {
@@ -707,6 +715,7 @@ func addBackupProfileFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSlice("databases", nil, "Database names or globs, e.g. shop,tenant_*")
 	cmd.Flags().StringSlice("exclude-databases", nil, `Databases to leave out ("" clears the list on edit)`)
 	cmd.Flags().StringSlice("exclude-tables", nil, `db.table globs to leave out, e.g. "*.jobs" ("" clears the list on edit)`)
+	cmd.Flags().StringSlice("exclude-paths", nil, `Paths left out of the app archives, e.g. storage/app/uploads,*.mp4 or shop:public/media ("" clears the list on edit; Cipi 5.13.0+)`)
 	cmd.Flags().String("every", "", "Interval: 30m, 6h, 1d (or --cron)")
 	cmd.Flags().String("cron", "", `Five-field cron expression, e.g. "0 2 * * *" (or --every)`)
 	cmd.Flags().StringSlice("dest", nil, "Destinations: local, s3 or named ones (comma-separated)")
@@ -788,6 +797,11 @@ func printBackupStatus(data *backupStatusData) {
 			)
 		}
 		t.Flush()
+		for _, p := range data.Profiles {
+			if len(p.ExcludePaths) > 0 && p.Scope != "db" {
+				output.KeyValue(nil, p.Name+" leaves out", strings.Join(p.ExcludePaths, ", "))
+			}
+		}
 		for _, p := range data.Profiles {
 			if p.Last != nil && p.Last.Detail != nil && *p.Last.Detail != "" && !backupStatusOK(p.Last.Status) {
 				output.Warn("%s: %s", p.Name, *p.Last.Detail)

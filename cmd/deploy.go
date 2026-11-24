@@ -20,7 +20,7 @@ Waits for the async job to finish before returning.
 
 Subcommands:
   cipi-cli deploy rollback myapp   previous release
-  cipi-cli deploy unlock myapp     clear a stuck deploy lock
+  cipi-cli deploy unlock myapp     clear a stuck lock, resume a paused commit
   cipi-cli deploy status myapp     is a deploy running now (whoever started it)
   cipi-cli deploy history myapp    past deploys with their duration
   cipi-cli deploy last             the last deploy of every app
@@ -96,11 +96,16 @@ Prompts for confirmation unless -y / --yes is passed.
 
 var deployUnlockCmd = &cobra.Command{
 	Use:   "unlock <app>",
-	Short: "Unlock a stuck deployment",
+	Short: "Unlock a stuck deployment, resume automatic deploys",
 	Long: `Clear a stuck deploy lock so a new deployment can run.
 
 Use when a previous deploy crashed or was interrupted and left the
 application locked.
+
+With Cipi 5.13.0+ it also resumes the automatic deploys of a commit whose
+deploy failed ("Paused" in deploy status): the webhook does not deploy that
+commit again by itself — the next push does, and so does a deploy that
+succeeds, or this command.
 
   cipi-cli deploy unlock myapp
   cipi-cli prod deploy unlock myapp`,
@@ -115,12 +120,29 @@ application locked.
 		}
 
 		output.Info("Unlocking deploy for '%s'...", args[0])
-		if err := client.DoAsyncAndWait("POST", fmt.Sprintf("/api/apps/%s/deploy/unlock", args[0]), nil); err != nil {
+		job, err := client.DoAsyncAndWaitResult("POST", fmt.Sprintf("/api/apps/%s/deploy/unlock", args[0]), nil)
+		if err != nil {
 			output.Error("Unlock failed: %s", err)
 			return err
 		}
 
-		output.Success("Deploy unlocked for '%s'", args[0])
+		// cipi/api 1.43+: unlocked, resumed, resumed_commit.
+		var result map[string]interface{}
+		if job != nil {
+			result, _ = job.Result.(map[string]interface{})
+		}
+		if resumed, _ := result["resumed"].(bool); resumed {
+			if c, _ := result["resumed_commit"].(string); c != "" {
+				if len(c) > 12 {
+					c = c[:12]
+				}
+				output.Success("Automatic deploys resumed for '%s' — commit %s deploys again on the next push or webhook", args[0], c)
+			} else {
+				output.Success("Automatic deploys resumed for '%s'", args[0])
+			}
+		} else {
+			output.Success("Deploy unlocked for '%s'", args[0])
+		}
 		fmt.Println()
 		return nil
 	},
