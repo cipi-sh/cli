@@ -33,6 +33,9 @@ type deployStatusData struct {
 	Last    map[string]interface{} `json:"last"`
 	Log     string                 `json:"log"`
 	Tail    []string               `json:"tail"`
+
+	// PausedCommit is the commit whose automatic deploy failed (Cipi 5.13.0+).
+	PausedCommit *string `json:"paused_commit"`
 }
 
 type deployHistoryData struct {
@@ -56,6 +59,10 @@ State is one of:
   interrupted  the last run never ended and nothing is running it — the
                deploy lock may be stuck (cipi-cli deploy unlock <app>)
   idle         nothing is going on
+
+Paused (Cipi 5.13.0+): the commit whose automatic deploy failed. The
+webhook does not deploy it again by itself; the next push does, and so do a
+deploy that succeeds and "cipi-cli deploy unlock <app>".
 
 --tail N adds the last N lines of the deploy log (500 at most).
 
@@ -285,6 +292,14 @@ func printDeployStatus(data *deployStatusData) {
 	}
 	output.KeyValue(nil, "Queued", formatFieldValue(data.Queued))
 	output.KeyValue(nil, "Locked", formatFieldValue(data.Locked))
+	if data.PausedCommit != nil && *data.PausedCommit != "" {
+		c := *data.PausedCommit
+		if len(c) > 12 {
+			c = c[:12]
+		}
+		output.KeyValue(nil, "Paused", output.Yellow.Sprint("automatic deploys of commit "+c))
+		output.Dim.Printf("  It failed: the next push deploys, or by hand: cipi-cli deploy %s (cipi-cli deploy unlock %s resumes it)\n", data.App, data.App)
+	}
 
 	switch data.State {
 	case "interrupted":
