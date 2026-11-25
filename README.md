@@ -217,6 +217,19 @@ Alias: `redirects` → `redirect`, `proxy` → `proxies`.
 
 DNS for the app domain (and aliases) must already point to the server.
 
+### Nginx directives
+
+```
+cipi-cli nginx show <app>                   Print the app's own nginx directives
+cipi-cli nginx edit <app>                   Edit them in $VISUAL / $EDITOR, on this computer
+cipi-cli nginx set <app> --file <path>      Replace them with a file's content (- for stdin)
+cipi-cli nginx reset <app>                  Remove them
+```
+
+Headers, caching, limits, rewrites, `location` blocks of your own: Cipi keeps them and includes them in the app's server block, so they survive every change of the vhost (Cipi 5.14.0+, cipi/api 1.44+, abilities `nginx-view` / `nginx-manage`). The server tests every change with `nginx -t` before the reload; a refused text changes nothing and the reasons are printed line by line — `edit` then offers to open the editor again on your text.
+
+From the API a **subset of nginx's language** is taken: no `access_log` or `error_log` with a path, `include`, `listen`, `server_name`, `*_pass`, certificates; `root` and `alias` only under the app's home. Reverse proxies and redirects are the commands above; the whole language is `cipi nginx edit <app>` on the server.
+
 ### Aliases
 
 ```
@@ -427,11 +440,15 @@ cipi-cli node upgrade [major] [--restart]   Latest patch of one major, or of eve
 cipi-cli node default <major|system>        Set the server-wide Node (5.9.0+)
 cipi-cli node remove <major> [-y]           Remove a Node major (5.9.0+)
 cipi-cli monitor                            System monitor checks (5.3.0+)
-cipi-cli packages                           Optional host packages catalog
+cipi-cli packages                           Optional host packages: the catalog and what is installed
+cipi-cli packages install <id>              Install an entry, e.g. browsershot, libreoffice (5.14.0+)
+cipi-cli packages remove <id> [-y]          Remove an entry, and only what nothing else needs (5.14.0+)
 cipi-cli zt                                 Cloudflare Zero Trust status (5.3.0+)
 ```
 
 `node install|upgrade|default|remove` are async jobs and take even (LTS) majors only — the CLI rejects anything else before calling the server. `node upgrade --restart` moves the SSR apps on the upgraded runtime to the new binary blue/green; without it they take it at their next deploy. Requires Cipi 5.9.0+, API 1.39+ and the `node-runtimes-manage` ability — existing tokens do not get it.
+
+`packages install|remove` are async jobs on the server's **closed catalog** (Cipi 5.14.0): `image-optimizers`, `avif`, `ffmpeg`, `imagemagick`, `poppler-utils`, `browsershot` (the libraries and fonts the Chrome Puppeteer downloads needs — Chrome itself comes with `npm install puppeteer` in the app), `fonts-cjk`, `pdftk`, `libreoffice` (headless), `pandoc`, `tesseract`, and the security scanners [Hackly](https://github.com/andreapollastri/hackly) runs: `sec-recon` (nmap, dig, whois) and `sec-gitleaks` from Ubuntu; `sec-nuclei`, `sec-zap`, `sec-nikto`, `sec-wpscan`, `sec-trivy`, `sec-semgrep`, `sec-checkov` as upstream releases Cipi pins by version and SHA-256. The list shows what each entry brings (`ffmpeg, ffprobe`, or *libraries*), its VERSION (`ubuntu`, or the pinned one — `2.16.1 → 2.17.0` when an older one is installed) and, for a partial install, what is missing — `install` completes a partial entry and updates an outdated one. `remove` asks for confirmation unless `-y`; a library entry keeps whatever other software still uses. Requires Cipi 5.14.0+, API 1.44+ and the `packages-manage` ability.
 
 ### IP whitelist
 
@@ -568,6 +585,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
 | Aliases add/remove path | — | 1.31+ (`/aliases/{domain}`) |
 | `.env` order (`apps env order`, `apps env set --order`), paused commit in `deploy status`, `backup profile --exclude-paths`, MySQL in `db engines`, basic auth agent in `apps basicauth status` | 5.13.0 | 1.43+ |
+| Optional packages install / remove (`packages install`, `packages remove`), PROVIDES, VERSION and missing in `packages` | 5.14.0 | 1.44+ (`packages-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
