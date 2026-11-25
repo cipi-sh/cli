@@ -16,28 +16,48 @@ import (
 const packagesManageMinAPI = "1.44.0"
 
 // hostPackage is one entry of the server's closed catalog, as
-// `cipi package list --json` describes it. kind, binaries and missing came
-// with Cipi 5.14.0: an older server leaves them empty.
+// `cipi package list --json` describes it. kind, binaries, missing, source,
+// version, installed_version and outdated came with Cipi 5.14.0: an older
+// server leaves them empty. An "upstream" entry (the sec-* scanners Hackly
+// runs) is a release Cipi pins by version and SHA-256.
 type hostPackage struct {
-	ID          string   `json:"id"`
-	Packages    []string `json:"packages"`
-	Description string   `json:"description"`
-	Kind        string   `json:"kind"`
-	Binaries    []string `json:"binaries"`
-	Missing     []string `json:"missing"`
-	Installed   bool     `json:"installed"`
-	Partial     bool     `json:"partial"`
+	ID               string   `json:"id"`
+	Packages         []string `json:"packages"`
+	Description      string   `json:"description"`
+	Kind             string   `json:"kind"`
+	Binaries         []string `json:"binaries"`
+	Missing          []string `json:"missing"`
+	Installed        bool     `json:"installed"`
+	Partial          bool     `json:"partial"`
+	Source           string   `json:"source"`
+	Version          string   `json:"version"`
+	InstalledVersion string   `json:"installed_version"`
+	Outdated         bool     `json:"outdated"`
 }
 
 func (p hostPackage) status() string {
 	switch {
 	case p.Installed:
 		return "installed"
+	case p.Outdated:
+		return "outdated"
 	case p.Partial:
 		return "partial"
 	default:
 		return "not installed"
 	}
+}
+
+// version is what the VERSION column shows: the pinned version of an
+// upstream entry, with the installed one when it is older; "ubuntu" else.
+func (p hostPackage) version() string {
+	if p.Source != "upstream" || p.Version == "" {
+		return "ubuntu"
+	}
+	if p.Outdated && p.InstalledVersion != "" {
+		return p.InstalledVersion + " → " + p.Version
+	}
+	return p.Version
 }
 
 // provides is what the entry brings: its commands, or "libraries" for an
@@ -87,7 +107,10 @@ var packagesCmd = &cobra.Command{
 libraries some Laravel packages need on the host, from Ubuntu's own
 repositories — image optimisers, AVIF, ffmpeg, ImageMagick, poppler-utils,
 the libraries for Browsershot's Chrome, CJK fonts, pdftk, headless LibreOffice,
-pandoc, Tesseract OCR (Cipi 5.14.0).
+pandoc, Tesseract OCR, and the security scanners Hackly runs (sec-recon,
+sec-gitleaks from Ubuntu; sec-nuclei, sec-zap, sec-nikto, sec-wpscan,
+sec-trivy, sec-semgrep, sec-checkov as upstream releases Cipi pins by version
+and SHA-256) — Cipi 5.14.0.
 
 Without a subcommand it lists the catalog (packages-view). Install and
 remove need Cipi 5.14.0+, cipi/api 1.44+ and the packages-manage ability;
@@ -149,16 +172,16 @@ func runPackagesList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	table := output.NewTable("PACKAGE", "STATUS", "PROVIDES", "DESCRIPTION")
+	table := output.NewTable("PACKAGE", "STATUS", "VERSION", "PROVIDES", "DESCRIPTION")
 	for _, p := range pkgs {
 		status := p.status()
-		if p.Partial && !p.Installed && len(p.Missing) > 0 {
+		if p.Partial && !p.Installed && !p.Outdated && len(p.Missing) > 0 {
 			status = fmt.Sprintf("partial (missing %s)", strings.Join(p.Missing, " "))
 		}
-		table.Row(p.ID, colorStatus(status), p.provides(), p.Description)
+		table.Row(p.ID, colorStatus(status), p.version(), p.provides(), p.Description)
 	}
 	table.Flush()
-	output.Dim.Println("  cipi-cli packages install <id>   /   cipi-cli packages remove <id>")
+	output.Dim.Println("  cipi-cli packages install <id>   /   cipi-cli packages remove <id>   (install updates an outdated one)")
 	fmt.Println()
 	return nil
 }
@@ -168,7 +191,9 @@ var packagesInstallCmd = &cobra.Command{
 	Aliases: []string{"add"},
 	Short:   "Install an entry of the catalog (async job)",
 	Long: `Install one entry of the server's catalog ("cipi package install <id>" on the
-host), or complete a partial one. apt takes from seconds to a few minutes.
+host), complete a partial one, or update an outdated upstream one to the
+version Cipi pins (its download is checked against the pinned SHA-256). It
+takes from seconds to a few minutes.
 
 Only ids of the server's own catalog are accepted: it is closed. A single apt
 package of a group is not an id here ('webp' is part of image-optimizers).
@@ -201,6 +226,9 @@ Requires Cipi 5.14.0+, cipi/api 1.44+ and the packages-manage ability.
 		}
 
 		if res, ok := jobResultMap(job); ok {
+			if v, _ := res["version"].(string); v != "" {
+				id = id + " " + v
+			}
 			if missing := stringList(res["missing"]); len(missing) > 0 {
 				output.Warn("%s installed, but these are missing: %s", id, strings.Join(missing, " "))
 				fmt.Println()

@@ -31,6 +31,14 @@ func TestDecodeHostPackagesReadsBothShapes(t *testing.T) {
 		t.Fatalf("bare list: %+v %v", old, err)
 	}
 
+	up, err := decodeHostPackages(json.RawMessage(`{"packages":[
+		{"id":"sec-zap","binaries":["zap.sh"],"installed":false,"source":"upstream","version":"2.17.0","installed_version":"2.16.1","outdated":true},
+		{"id":"sec-nuclei","binaries":["nuclei"],"installed":true,"source":"upstream","version":"3.11.1","installed_version":"3.11.1"}
+	]}`))
+	if err != nil || up[0].status() != "outdated" || up[0].version() != "2.16.1 → 2.17.0" || up[1].version() != "3.11.1" || pkgs[1].version() != "ubuntu" {
+		t.Fatalf("upstream: %+v %v", up, err)
+	}
+
 	if _, err := decodeHostPackages(json.RawMessage(`"nope"`)); err == nil {
 		t.Fatal("a string is not a catalog")
 	}
