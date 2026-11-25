@@ -36,37 +36,6 @@ Requires Cipi 5.3.0+ and monitor-view ability.`,
 	},
 }
 
-var packagesCmd = &cobra.Command{
-	Use:   "packages",
-	Short: "List optional host packages catalog",
-	Long: `Read-only catalog of optional packages from GET /api/packages.
-
-Requires packages-view ability.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := mustClient()
-		if err != nil {
-			return err
-		}
-
-		var result struct {
-			Data interface{} `json:"data"`
-		}
-		if err := client.Get("/api/packages", &result); err != nil {
-			output.Error("Failed to list packages: %s", apiErrorHint(err, "5.2.2", "packages-view"))
-			return err
-		}
-
-		if jsonFlag {
-			output.PrintJSON(result)
-			return nil
-		}
-
-		output.Header("Host packages")
-		printDataWrapper(result.Data)
-		return nil
-	},
-}
-
 var ztCmd = &cobra.Command{
 	Use:   "zt",
 	Short: "Show Cloudflare Zero Trust status",
@@ -99,5 +68,5 @@ Requires Cipi 5.3.0+ and zt-view ability.`,
 }
 
 func init() {
-	rootCmd.AddCommand(monitorCmd, packagesCmd, ztCmd)
+	rootCmd.AddCommand(monitorCmd, ztCmd)
 }

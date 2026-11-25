@@ -427,11 +427,15 @@ cipi-cli node upgrade [major] [--restart]   Latest patch of one major, or of eve
 cipi-cli node default <major|system>        Set the server-wide Node (5.9.0+)
 cipi-cli node remove <major> [-y]           Remove a Node major (5.9.0+)
 cipi-cli monitor                            System monitor checks (5.3.0+)
-cipi-cli packages                           Optional host packages catalog
+cipi-cli packages                           Optional host packages: the catalog and what is installed
+cipi-cli packages install <id>              Install an entry, e.g. browsershot, libreoffice (5.14.0+)
+cipi-cli packages remove <id> [-y]          Remove an entry, and only what nothing else needs (5.14.0+)
 cipi-cli zt                                 Cloudflare Zero Trust status (5.3.0+)
 ```
 
 `node install|upgrade|default|remove` are async jobs and take even (LTS) majors only — the CLI rejects anything else before calling the server. `node upgrade --restart` moves the SSR apps on the upgraded runtime to the new binary blue/green; without it they take it at their next deploy. Requires Cipi 5.9.0+, API 1.39+ and the `node-runtimes-manage` ability — existing tokens do not get it.
+
+`packages install|remove` are async jobs on the server's **closed catalog** (Cipi 5.14.0): `image-optimizers`, `avif`, `ffmpeg`, `imagemagick`, `poppler-utils`, `browsershot` (the libraries and fonts the Chrome Puppeteer downloads needs — Chrome itself comes with `npm install puppeteer` in the app), `fonts-cjk`, `pdftk`, `libreoffice` (headless), `pandoc`, `tesseract`. The list shows what each entry brings (`ffmpeg, ffprobe`, or *libraries*) and, for a partial install, what is missing — `install` completes it. `remove` asks for confirmation unless `-y`; a library entry keeps whatever other software still uses. Requires Cipi 5.14.0+, API 1.44+ and the `packages-manage` ability.
 
 ### IP whitelist
 
@@ -568,6 +572,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Global domain map (`domains`) | 4.5.5 | — (built from `/api/apps`) |
 | Aliases add/remove path | — | 1.31+ (`/aliases/{domain}`) |
 | `.env` order (`apps env order`, `apps env set --order`), paused commit in `deploy status`, `backup profile --exclude-paths`, MySQL in `db engines`, basic auth agent in `apps basicauth status` | 5.13.0 | 1.43+ |
+| Optional packages install / remove (`packages install`, `packages remove`), PROVIDES and missing in `packages` | 5.14.0 | 1.44+ (`packages-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
