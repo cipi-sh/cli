@@ -217,6 +217,19 @@ Alias: `redirects` → `redirect`, `proxy` → `proxies`.
 
 DNS for the app domain (and aliases) must already point to the server.
 
+### Nginx directives
+
+```
+cipi-cli nginx show <app>                   Print the app's own nginx directives
+cipi-cli nginx edit <app>                   Edit them in $VISUAL / $EDITOR, on this computer
+cipi-cli nginx set <app> --file <path>      Replace them with a file's content (- for stdin)
+cipi-cli nginx reset <app>                  Remove them
+```
+
+Headers, caching, limits, rewrites, `location` blocks of your own: Cipi keeps them and includes them in the app's server block, so they survive every change of the vhost (Cipi 5.14.0+, cipi/api 1.44+, abilities `nginx-view` / `nginx-manage`). The server tests every change with `nginx -t` before the reload; a refused text changes nothing and the reasons are printed line by line — `edit` then offers to open the editor again on your text.
+
+From the API a **subset of nginx's language** is taken: no `access_log` or `error_log` with a path, `include`, `listen`, `server_name`, `*_pass`, certificates; `root` and `alias` only under the app's home. Reverse proxies and redirects are the commands above; the whole language is `cipi nginx edit <app>` on the server.
+
 ### Aliases
 
 ```

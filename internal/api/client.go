@@ -28,7 +28,10 @@ type APIError struct {
 	Message   string              `json:"message"`
 	ErrorText string              `json:"error,omitempty"`
 	Errors    map[string][]string `json:"errors,omitempty"`
-	Status    int                 `json:"-"`
+	// Reasons is what a refused change says line by line (nginx directives,
+	// cipi/api 1.44): the first is ErrorText again.
+	Reasons []string `json:"reasons,omitempty"`
+	Status  int      `json:"-"`
 }
 
 // UnmarshalJSON accepts the two shapes of "errors" the API sends: Laravel
@@ -40,11 +43,12 @@ func (e *APIError) UnmarshalJSON(data []byte) error {
 		Message   string          `json:"message"`
 		ErrorText string          `json:"error"`
 		Errors    json.RawMessage `json:"errors"`
+		Reasons   []string        `json:"reasons"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	e.Message, e.ErrorText, e.Errors = raw.Message, raw.ErrorText, nil
+	e.Message, e.ErrorText, e.Errors, e.Reasons = raw.Message, raw.ErrorText, nil, raw.Reasons
 	if len(raw.Errors) > 0 {
 		var fields map[string][]string
 		if json.Unmarshal(raw.Errors, &fields) == nil {
