@@ -235,9 +235,13 @@ From the API a **subset of nginx's language** is taken: no `access_log` or `erro
 ```
 cipi-cli cache                              Every app: cache on or off, pages kept, space taken
 cipi-cli cache show <app>                   One app: on or off, time kept, pages and bytes now
-cipi-cli cache on <app> [--ttl 10m] [--size 256m] [--deploy-clear=false]
+cipi-cli cache on <app> [--ttl 10m] [--size 256m] [--exclude '/cart*,/feed'] [--deploy-clear=false]
 cipi-cli cache off <app>                    Every request runs PHP again; the cached pages are deleted
 cipi-cli cache ttl <app> <time>             How long a page is kept: 30s, 10m, 1h, 7d
+cipi-cli cache exclude <app>                The paths of its own the app never caches
+cipi-cli cache exclude <app> add '/cart*' /feed
+cipi-cli cache exclude <app> remove /feed   --all for none of its own
+cipi-cli cache exclude <app> set '/cart*,/feed'
 cipi-cli cache clear <app>                  Delete the cached pages now
 ```
 

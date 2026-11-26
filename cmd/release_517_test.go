@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -33,12 +34,12 @@ func TestCacheTTLAndSizeAreTheServersRules(t *testing.T) {
 }
 
 func TestCacheOnSendsOnlyWhatWasGiven(t *testing.T) {
-	body, err := cacheOnBody("", "", nil)
+	body, err := cacheOnBody("", "", nil, nil)
 	if err != nil || len(body) != 1 || body["enabled"] != true {
 		t.Fatalf("plain on: %v %v", body, err)
 	}
 	no := false
-	body, err = cacheOnBody("1h", "2g", &no)
+	body, err = cacheOnBody("1h", "2g", &no, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,11 +47,77 @@ func TestCacheOnSendsOnlyWhatWasGiven(t *testing.T) {
 	if string(raw) != `{"clear_on_deploy":false,"enabled":true,"size":"2g","ttl":"1h"}` {
 		t.Errorf("body: %s", raw)
 	}
-	if _, err := cacheOnBody("ten minutes", "", nil); err == nil {
+	if _, err := cacheOnBody("ten minutes", "", nil, nil); err == nil {
 		t.Error("a ttl that is not a time was sent")
 	}
-	if _, err := cacheOnBody("", "8m", nil); err == nil {
+	if _, err := cacheOnBody("", "8m", nil, nil); err == nil {
 		t.Error("a size under 16m was sent")
+	}
+	// The app's own paths: the whole list when given, an empty one for none.
+	body, _ = cacheOnBody("", "", nil, []string{"/cart*", "/feed"})
+	raw, _ = json.Marshal(body)
+	if string(raw) != `{"enabled":true,"exclude":["/cart*","/feed"]}` {
+		t.Errorf("body with paths: %s", raw)
+	}
+	body, _ = cacheOnBody("", "", nil, []string{})
+	raw, _ = json.Marshal(body)
+	if string(raw) != `{"enabled":true,"exclude":[]}` {
+		t.Errorf("body with no path: %s", raw)
+	}
+}
+
+func TestCacheExcludePaths(t *testing.T) {
+	got, err := cacheExcludePaths([]string{"cart*", " /feed , /cart*", "/a**b", "/caff%C3%A8_1.0~x", "/"})
+	if err != nil || strings.Join(got, " ") != "/cart* /feed /a*b /caff%C3%A8_1.0~x /" {
+		t.Errorf("paths: %v %v", got, err)
+	}
+	if got, err := cacheExcludePaths([]string{"", " , "}); err != nil || len(got) != 0 {
+		t.Errorf("nothing given is an empty list: %v %v", got, err)
+	}
+	for _, bad := range []string{"/a b", "/x';id", "/a;b", `/a"b`, "/a$b", "/a{b}", "/a|b", "/(a)", `/a\b`, "/a?b=1", "/a#b", "/a\nb", "/" + strings.Repeat("a", 128)} {
+		if _, err := cacheExcludePaths([]string{bad}); err == nil {
+			t.Errorf("%q was accepted", bad)
+		}
+	}
+	for _, all := range []string{"*", "/*", "/**"} {
+		if _, err := cacheExcludePaths([]string{all}); err == nil || !strings.Contains(err.Error(), "every page") {
+			t.Errorf("%q is every page: %v", all, err)
+		}
+	}
+	many := make([]string, 51)
+	for i := range many {
+		many[i] = "/p" + strconv.Itoa(i)
+	}
+	if _, err := cacheExcludePaths(many); err == nil {
+		t.Error("51 paths were accepted")
+	}
+	if _, err := cacheExcludePaths(many[:50]); err != nil {
+		t.Errorf("50 paths: %v", err)
+	}
+}
+
+func TestCacheExcludeAddAndRemove(t *testing.T) {
+	now := []string{"/cart*", "/feed"}
+	if got := cacheExcludeAdd(now, []string{"/feed", "/x", "/x"}); strings.Join(got, " ") != "/cart* /feed /x" {
+		t.Errorf("add: %v", got)
+	}
+	if strings.Join(now, " ") != "/cart* /feed" {
+		t.Errorf("add changed the list it was given: %v", now)
+	}
+	out, missing := cacheExcludeRemove(now, []string{"/feed", "/nope"})
+	if strings.Join(out, " ") != "/cart*" || strings.Join(missing, " ") != "/nope" {
+		t.Errorf("remove: %v %v", out, missing)
+	}
+	out, _ = cacheExcludeRemove(nil, []string{"/x"})
+	if raw, _ := json.Marshal(out); string(raw) != "[]" {
+		t.Errorf("an empty list is [], not null: %s", raw)
+	}
+	var c pageCacheResponse
+	if err := json.Unmarshal([]byte(`{"data":{"app":"blog","enabled":true,"exclude":["/cart*"],"exclude_max":50}}`), &c); err != nil || len(c.Data.Exclude) != 1 || c.Data.ExcludeMax != 50 {
+		t.Errorf("status: %+v %v", c.Data, err)
+	}
+	if got := cachePath("blog", "/exclude"); got != "/api/apps/blog/cache/exclude" {
+		t.Errorf("got %s", got)
 	}
 }
 
@@ -185,7 +252,7 @@ func TestNotificationSettingsBodies(t *testing.T) {
 
 func TestTheNewCommandsAreRegistered(t *testing.T) {
 	want := map[string][]string{
-		"cache":         {"list", "show", "on", "off", "ttl", "clear"},
+		"cache":         {"list", "show", "on", "off", "ttl", "exclude", "clear"},
 		"octane":        {"show", "php", "restart", "builds", "upgrade"},
 		"valkey":        {"list", "isolate", "share", "restart", "flush-shared"},
 		"notifications": {"settings", "timezone", "server-name"},
