@@ -230,6 +230,29 @@ Headers, caching, limits, rewrites, `location` blocks of your own: Cipi keeps th
 
 From the API a **subset of nginx's language** is taken: no `access_log` or `error_log` with a path, `include`, `listen`, `server_name`, `*_pass`, certificates; `root` and `alias` only under the app's home. Reverse proxies and redirects are the commands above; the whole language is `cipi nginx edit <app>` on the server.
 
+### Page cache
+
+```
+cipi-cli cache                              Every app: cache on or off, pages kept, space taken
+cipi-cli cache show <app>                   One app: on or off, time kept, pages and bytes now
+cipi-cli cache on <app> [--ttl 10m] [--size 256m] [--deploy-clear=false]
+cipi-cli cache off <app>                    Every request runs PHP again; the cached pages are deleted
+cipi-cli cache ttl <app> <time>             How long a page is kept: 30s, 10m, 1h, 7d
+cipi-cli cache clear <app>                  Delete the cached pages now
+```
+
+The page cache is nginx's: it keeps the page PHP made and answers the next visitors with it, without running PHP at all — `fastcgi_cache` for an app on PHP-FPM (Laravel, WordPress, any PHP app), `proxy_cache` for one on Octane (Cipi 5.17.0+, cipi/api 1.47+, abilities `nginx-view` / `nginx-manage`).
+
+It is **not OPcache**. OPcache is on already on every Cipi server and keeps PHP's compiled code in memory: PHP no longer parses its files at every request, but it still runs — WordPress boots, loads its plugins, asks the database and builds the same page again for every visitor. With the page cache none of that happens for a page that is kept: it comes back in about a millisecond, and a small server holds a traffic peak that would have filled its PHP pool.
+
+Never cached: anything but GET and HEAD, signed-in visitors (WordPress, WooCommerce carts, PHP and Laravel sessions), an `Authorization` header, `/wp-admin`, `wp-login.php`, `/wp-json`, a query string (tracking parameters apart), and whatever the app marks `private` / `no-cache` or gives a cookie. A Laravel app marks every response `no-cache, private` by default, so it caches only the routes it marks public itself. `X-Cache-Status` in the response says `HIT`, `MISS`, `BYPASS`, `EXPIRED` or `STALE`.
+
+Cipi empties the cache after every successful deploy and rollback. In a deploy script, a cron or a plugin of your own — on the server, as the app's user:
+
+```
+sudo /usr/local/bin/cipi-cache-clear <app>
+```
+
 ### Aliases
 
 ```
@@ -315,9 +338,16 @@ Requires Cipi 5.9.0+, API 1.39+ and the `backups-view` (status, runs) / `backups
 ```
 cipi-cli php list                           Installed versions, FPM status, default (5.0.6+)
 cipi-cli php install <version>              Install PHP 8.3 / 8.4 / 8.5 / 8.6
+cipi-cli octane show <app>                  Octane: which PHP answers requests, which runs the rest (5.17.0+)
+cipi-cli octane php <app> <version>         Put an Octane app on a PHP version, by its number
+cipi-cli octane restart <app>               Restart Octane on its build and check that it answers
+cipi-cli octane builds                      The FrankenPHP build of every Octane app (5.10.0+)
+cipi-cli octane upgrade [app]               Newest FrankenPHP build on the app's own PHP
 ```
 
 Switching the default PHP version and removing versions are host-only (`cipi php switch|remove`).
+
+An **Octane** app runs two PHP: the one built into its FrankenPHP binary answers the requests, the server's `php<X.Y>` runs Composer, artisan, cron and the queue workers. `octane show` prints both and, when they differ, the command that puts them on one. `octane php <app> 8.5` takes the version by its number, as for any other app: the FrankenPHP build that carries it is activated (and fetched from FrankenPHP's releases when the server has none), Octane is restarted and checked — the previous build comes back when it does not answer — then the rest of the app moves. That PHP has to be installed on the server (`php install`). Requires Cipi 5.17.0+, cipi/api 1.47+ and `php-view` / `php-manage`.
 
 A server installed before Cipi 4.5.4 can still have PHP 7.4–8.2. `php list` shows them marked `(legacy)`: the apps on them keep running and can be moved to a current version (`apps edit <app> --php 8.5`), and no app can be created on or moved to one — the API answers `422`.
 
@@ -326,12 +356,20 @@ A server installed before Cipi 4.5.4 can still have PHP 7.4–8.2. `php list` sh
 ```
 cipi-cli services list [name]               System services and status (5.0.6+)
 cipi-cli services restart <name>            Restart a service (nginx, mariadb, …)
+cipi-cli valkey                             Valkey per app: own, shared, external (5.17.0+)
+cipi-cli valkey isolate <app> [--no-copy] [-y]   Give an app its own Valkey instance
+cipi-cli valkey isolate --all [-y]          The same for every app still on the shared instance
+cipi-cli valkey share <app> [-y]            Move it back to the shared instance
+cipi-cli valkey restart <app>               Restart an app's own instance
+cipi-cli valkey flush-shared [-y]           Empty the shared instance and change its password
 cipi-cli ssh-keys list                      Authorized keys of the cipi user (5.0.6+)
 cipi-cli ssh-keys add [key] [--file F]      Add a public key (inline or from a .pub file)
 cipi-cli ssh-keys remove <id> [-y]          Remove a key by id
 ```
 
 Aliases: `service` → `services`, `ssh` → `ssh-keys`.
+
+**Valkey per app:** a Laravel app keeps cache, sessions and queues in Valkey. On the server's shared instance every app holds the same password, so each can read and write the others' keys; an app with an instance of its own cannot. `valkey isolate` copies the app's keys with the app in maintenance mode for the seconds that takes, switches its `.env` and restarts its workers (`--no-copy` starts it empty). Once nobody is left on the shared instance, `valkey flush-shared` empties it and changes its password — the new one stays on the server (`cipi credentials`): no password ever travels through the API. Requires Cipi 5.17.0+, cipi/api 1.47+ and `services-view` / `services-manage`.
 
 ### SMTP notifications
 
@@ -391,6 +429,9 @@ cipi-cli notifications triggers                         Every trigger by categor
 cipi-cli notifications triggers off deploy_success ssh_login
 cipi-cli notifications triggers all-off --except deploy_fail,backup_fail,health_fail
 cipi-cli notifications triggers reset
+cipi-cli notifications settings                         The time zone and the server name notifications use (5.17.0+)
+cipi-cli notifications timezone Europe/Rome             The Time line of every notification ("server": the server's own)
+cipi-cli notifications server-name production           "production (vmi12334)" instead of the hostname alone (--clear: back)
 ```
 
 Types: smtp, resend, ses, slack, discord, mattermost, googlechat, telegram, ntfy, pushover, webhook. `cipi-cli smtp …` keeps working.
@@ -586,6 +627,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Aliases add/remove path | — | 1.31+ (`/aliases/{domain}`) |
 | `.env` order (`apps env order`, `apps env set --order`), paused commit in `deploy status`, `backup profile --exclude-paths`, MySQL in `db engines`, basic auth agent in `apps basicauth status` | 5.13.0 | 1.43+ |
 | Optional packages install / remove (`packages install`, `packages remove`), PROVIDES, VERSION and missing in `packages` | 5.14.0 | 1.44+ (`packages-manage`) |
+| Page cache (`cache`), Octane PHP (`octane show|php|restart`), Valkey per app (`valkey`), notification time zone and server name (`notifications settings|timezone|server-name`) | 5.17.0 | 1.47+ (no new ability: `nginx-*`, `php-*`, `services-*`, `notifications-*`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
