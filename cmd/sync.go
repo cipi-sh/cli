@@ -291,6 +291,9 @@ server's key already ("cipi-cli sync key" here, "cipi sync trust" there).
 database of an app that is already on the target. --with-storage adds each
 app's shared/storage, which can be large.
 
+Laravel and custom apps travel. Node apps are skipped — sync does not recreate
+them yet: create them on the target, they deploy from Git.
+
 The archive is encrypted on this server with a passphrase made for the
 transfer and handed to the target over SSH: there is nothing to type, and
 nothing to keep. A transfer may take long; it is followed for two hours.
