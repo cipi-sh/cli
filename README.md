@@ -488,8 +488,10 @@ cipi-cli monitor                            System monitor checks (5.3.0+)
 cipi-cli packages                           Optional host packages: the catalog and what is installed
 cipi-cli packages install <id>              Install an entry, e.g. browsershot, libreoffice (5.14.0+)
 cipi-cli packages remove <id> [-y]          Remove an entry, and only what nothing else needs (5.14.0+)
-cipi-cli zt                                 Cloudflare Zero Trust status (5.3.0+)
+cipi-cli zt                                 Zero Trust status: Cloudflare Tunnel (5.3.0+) and the mesh network — Tailscale, NetBird (5.18.0+)
 ```
+
+`zt` reads both sides of Zero Trust. Cloudflare Tunnel publishes the sites; a mesh network — Tailscale or NetBird — is how the people who run the server reach it. The tunnel's lines come first (state as Cloudflare sees it, locks, how many hostnames); then the mesh: connected or not and the client's own word for why, the server's address and name on the network, peers online, the node key's expiry (Tailscale), the command to SSH in over it, whether port 22 and 80/443 are closed to the world, and the server's warnings. `--json` has everything the server said, hostnames and Access included. Joining a network and the locks are not here: `cipi zt tailscale|netbird …` on the server.
 
 `node install|upgrade|default|remove` are async jobs and take even (LTS) majors only — the CLI rejects anything else before calling the server. `node upgrade --restart` moves the SSR apps on the upgraded runtime to the new binary blue/green; without it they take it at their next deploy. Requires Cipi 5.9.0+, API 1.39+ and the `node-runtimes-manage` ability — existing tokens do not get it.
 
@@ -632,6 +634,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | `.env` order (`apps env order`, `apps env set --order`), paused commit in `deploy status`, `backup profile --exclude-paths`, MySQL in `db engines`, basic auth agent in `apps basicauth status` | 5.13.0 | 1.43+ |
 | Optional packages install / remove (`packages install`, `packages remove`), PROVIDES, VERSION and missing in `packages` | 5.14.0 | 1.44+ (`packages-manage`) |
 | Page cache (`cache`), Octane PHP (`octane show|php|restart`), Valkey per app (`valkey`), notification time zone and server name (`notifications settings|timezone|server-name`) | 5.17.0 | 1.47+ (no new ability: `nginx-*`, `php-*`, `services-*`, `notifications-*`) |
+| The mesh network in `zt` (Tailscale, NetBird: address, peers, node key, locks, warnings) | 5.18.0 | 1.48+ (`zt-view`, no new ability) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
