@@ -44,7 +44,8 @@ Subcommands:
 		}
 
 		output.Info("Deploying '%s'...", args[0])
-		if err := client.DoAsyncAndWait("POST", fmt.Sprintf("/api/apps/%s/deploy", args[0]), nil); err != nil {
+		// A deploy is the one job that is long by nature: the API gives it an hour.
+		if err := client.DoAsyncAndWaitFor("POST", fmt.Sprintf("/api/apps/%s/deploy", args[0]), nil, api.DeployJobWait); err != nil {
 			output.Error("Deploy failed: %s", err)
 			return err
 		}

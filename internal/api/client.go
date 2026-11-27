@@ -425,41 +425,73 @@ func (c *Client) DoAsync(method, path string, body interface{}) (*AsyncResponse,
 	return &async, nil
 }
 
+// How long a job is followed before the wait gives up. The API stops a job
+// after ten minutes, a deploy after an hour (cipi/api 1.48.0: the frontend
+// build of a release alone may take 30 minutes), and closes it as failed — so
+// the wait is a minute longer than that, and what ends it is the end of the
+// job. The loop used to stop after 120 polls, under nine minutes: a deploy
+// with a long build "timed out after polling" while it was still going.
+const (
+	JobWait       = 11 * time.Minute
+	DeployJobWait = 61 * time.Minute
+)
+
+// The clock of the wait: time.Sleep and time.Now, replaced in tests.
+var (
+	jobSleep = time.Sleep
+	jobNow   = time.Now
+)
+
+// jobPollInterval is the pause after the poll numbered n (from 0): often at
+// first, when most jobs end, then every few seconds.
+func jobPollInterval(n int) time.Duration {
+	switch {
+	case n > 30:
+		return 5 * time.Second
+	case n > 10:
+		return 3 * time.Second
+	default:
+		return 2 * time.Second
+	}
+}
+
 func (c *Client) WaitForJob(jobID string) (*JobStatus, error) {
+	return c.WaitForJobFor(jobID, JobWait)
+}
+
+// WaitForJobFor polls a job until it ends, or until wait has passed.
+func (c *Client) WaitForJobFor(jobID string, wait time.Duration) (*JobStatus, error) {
 	s := spinner.New(spinner.CharSets[14], 120*time.Millisecond)
 	s.Suffix = "  Processing..."
 	s.Color("cyan")
 	s.Start()
 	defer s.Stop()
 
-	maxAttempts := 120
-	for i := 0; i < maxAttempts; i++ {
+	deadline := jobNow().Add(wait)
+	for i := 0; ; i++ {
 		job, err := c.GetJob(jobID)
+		if err == nil {
+			switch job.Status {
+			case "completed", "success", "finished":
+				s.Stop()
+				return job, nil
+			case "failed", "error":
+				s.Stop()
+				return job, fmt.Errorf("%s", job.FailureMessage())
+			}
+		}
+		if !jobNow().Before(deadline) {
+			break
+		}
 		if err != nil {
-			time.Sleep(2 * time.Second)
+			// The API did not answer this once: asked again soon.
+			jobSleep(2 * time.Second)
 			continue
 		}
-
-		switch job.Status {
-		case "completed", "success", "finished":
-			s.Stop()
-			return job, nil
-		case "failed", "error":
-			s.Stop()
-			return job, fmt.Errorf("%s", job.FailureMessage())
-		}
-
-		interval := 2 * time.Second
-		if i > 10 {
-			interval = 3 * time.Second
-		}
-		if i > 30 {
-			interval = 5 * time.Second
-		}
-		time.Sleep(interval)
+		jobSleep(jobPollInterval(i))
 	}
 
-	return nil, fmt.Errorf("job %s timed out after polling", jobID)
+	return nil, fmt.Errorf("job %s is still running after %d minutes: this command stops waiting, the job does not. Follow it with: cipi-cli jobs wait %s", jobID, int(wait.Minutes()), jobID)
 }
 
 func (c *Client) DoAsyncAndWait(method, path string, body interface{}) error {
@@ -470,6 +502,17 @@ func (c *Client) DoAsyncAndWait(method, path string, body interface{}) error {
 // DoAsyncAndWaitResult is DoAsyncAndWait but also returns the finished job, so callers can
 // read its parsed result (nil when the API answered synchronously without a job_id).
 func (c *Client) DoAsyncAndWaitResult(method, path string, body interface{}) (*JobStatus, error) {
+	return c.DoAsyncAndWaitResultFor(method, path, body, JobWait)
+}
+
+// DoAsyncAndWaitFor is DoAsyncAndWait for a job that may take longer than most: a deploy.
+func (c *Client) DoAsyncAndWaitFor(method, path string, body interface{}, wait time.Duration) error {
+	_, err := c.DoAsyncAndWaitResultFor(method, path, body, wait)
+	return err
+}
+
+// DoAsyncAndWaitResultFor is DoAsyncAndWaitResult with the time the job is followed for.
+func (c *Client) DoAsyncAndWaitResultFor(method, path string, body interface{}, wait time.Duration) (*JobStatus, error) {
 	async, err := c.DoAsync(method, path, body)
 	if err != nil {
 		return nil, err
@@ -481,5 +524,5 @@ func (c *Client) DoAsyncAndWaitResult(method, path string, body interface{}) (*J
 
 	output.Info("Job dispatched: %s", async.JobIDString())
 
-	return c.WaitForJob(async.JobIDString())
+	return c.WaitForJobFor(async.JobIDString(), wait)
 }

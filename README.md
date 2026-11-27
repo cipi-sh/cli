@@ -591,6 +591,8 @@ cipi-cli <command> --help                   Command help
 
 Write operations (create, edit, delete, deploy, SSL, etc.) are asynchronous on the Cipi API. The CLI automatically polls for job completion and displays a spinner while waiting. If you prefer to handle polling manually, use `cipi-cli jobs show <id>` or `cipi-cli jobs wait <id>`.
 
+**How long it waits:** as long as the server lets the job run, and a minute more — an hour for `deploy` (the frontend build of a release alone may take 30 minutes), ten minutes for every other command. A job the API stops there ends as failed and the CLI says why. If the wait itself is over first, the command says that the job is still running and how to pick it up again: `cipi-cli jobs wait <id>`, which waits for as long as a deploy may take. (Before, the CLI stopped after 120 polls — under nine minutes — and a deploy with a long build "timed out after polling" while it was still going.)
+
 ## Releases
 
 Releases are automated via GitHub Actions. To publish a new version:
