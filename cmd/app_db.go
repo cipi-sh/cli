@@ -18,7 +18,7 @@ func appCreateDB(name string, laravel bool) (string, error) {
 		return "", nil
 	}
 	if laravel {
-		return "", fmt.Errorf("--db is for custom and Node apps: a Laravel app is created with its own database, named like the app (one more, afterwards: cipi-cli db create --name %s --app <app>)", name)
+		return "", fmt.Errorf("--db is for custom and Node apps: a Laravel app is created with its own database, named like the app (one more, afterwards: cipi-cli db create %s --app <app>)", name)
 	}
 	if !appDBNameRE.MatchString(name) {
 		return "", fmt.Errorf("--db %q is not a database name: lowercase letters, digits and _, starting with a letter (2 to 64 characters)", name)
