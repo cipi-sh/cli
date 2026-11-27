@@ -426,14 +426,15 @@ func (c *Client) DoAsync(method, path string, body interface{}) (*AsyncResponse,
 }
 
 // How long a job is followed before the wait gives up. The API stops a job
-// after ten minutes, a deploy after an hour (cipi/api 1.48.0: the frontend
-// build of a release alone may take 30 minutes), and closes it as failed — so
-// the wait is a minute longer than that, and what ends it is the end of the
-// job. The loop used to stop after 120 polls, under nine minutes: a deploy
-// with a long build "timed out after polling" while it was still going.
+// after ten minutes, a deploy after two hours (cipi/api 1.48.0: the frontend
+// build of a release alone has 30 minutes, and up to an hour where the app
+// asks for it), and closes it as failed — so the wait is a minute longer than
+// that, and what ends it is the end of the job. The loop used to stop after
+// 120 polls, under nine minutes: a deploy with a long build "timed out after
+// polling" while it was still going.
 const (
 	JobWait       = 11 * time.Minute
-	DeployJobWait = 61 * time.Minute
+	DeployJobWait = 121 * time.Minute
 )
 
 // The clock of the wait: time.Sleep and time.Now, replaced in tests.

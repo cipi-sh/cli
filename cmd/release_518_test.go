@@ -230,3 +230,38 @@ func TestZtLockAsksInWords(t *testing.T) {
 		t.Errorf("http: %s", q)
 	}
 }
+
+func TestDeployClocks(t *testing.T) {
+	if len(deployClocks) != 2 || deployClocks[0].field != "build_timeout" || deployClocks[1].field != "step_timeout" {
+		t.Fatalf("deployClocks = %+v, want the build and the step", deployClocks)
+	}
+	build, step := deployClocks[0], deployClocks[1]
+	for _, ok := range []struct {
+		clock   deployClock
+		seconds int
+	}{{build, 60}, {build, 1800}, {build, 3600}, {step, 60}, {step, 300}, {step, 1800}} {
+		if got, err := deployClockSeconds(ok.clock, ok.seconds); err != nil || got != ok.seconds {
+			t.Errorf("--%s %d: got %d, %v", ok.clock.flag, ok.seconds, got, err)
+		}
+	}
+	for _, bad := range []struct {
+		clock   deployClock
+		seconds int
+		says    string
+	}{
+		{build, 59, "--build-timeout is a number of seconds from 60 to 3600 (1800 unless set)"},
+		{build, 3601, "--build-timeout is a number of seconds from 60 to 3600"},
+		{build, 0, "the frontend build"},
+		{step, -5, "--step-timeout is a number of seconds from 60 to 1800 (300 unless set)"},
+		{step, 1801, "every other command of the deploy"},
+	} {
+		if _, err := deployClockSeconds(bad.clock, bad.seconds); err == nil || !strings.Contains(err.Error(), bad.says) {
+			t.Errorf("--%s %d: error %v, want it to say %q", bad.clock.flag, bad.seconds, err, bad.says)
+		}
+	}
+	for _, name := range []string{"build-timeout", "step-timeout"} {
+		if deployConfigSetCmd.Flags().Lookup(name) == nil {
+			t.Errorf("deploy config set has no --%s", name)
+		}
+	}
+}

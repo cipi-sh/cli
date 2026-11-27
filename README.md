@@ -165,6 +165,10 @@ cipi-cli deploy last                        The last run of every app (5.9.0+)
 cipi-cli deploy rollback <app> [-y]         Rollback to previous release
 cipi-cli deploy unlock <app>                Unlock a stuck deployment, resume a paused commit
 cipi-cli deploy config show|set <app>       Structured deploy.php options (5.0.3+)
+                                            [--keep-releases N] [--build-timeout S] [--step-timeout S] [--migrate] [--node-build CMD] …
+                                            --build-timeout / --step-timeout (5.18.0+): seconds the frontend build may run (60-3600,
+                                            1800 unless set) and every other command of a deploy (60-1800, 300 unless set).
+                                            A Node app takes --keep-releases, --predeploy-snapshot and these two.
 cipi-cli deploy audit <app> [--days N]      Deploy audit ledger (5.4.0+)
 ```
 
@@ -591,7 +595,7 @@ cipi-cli <command> --help                   Command help
 
 Write operations (create, edit, delete, deploy, SSL, etc.) are asynchronous on the Cipi API. The CLI automatically polls for job completion and displays a spinner while waiting. If you prefer to handle polling manually, use `cipi-cli jobs show <id>` or `cipi-cli jobs wait <id>`.
 
-**How long it waits:** as long as the server lets the job run, and a minute more — an hour for `deploy` (the frontend build of a release alone may take 30 minutes), ten minutes for every other command. A job the API stops there ends as failed and the CLI says why. If the wait itself is over first, the command says that the job is still running and how to pick it up again: `cipi-cli jobs wait <id>`, which waits for as long as a deploy may take. (Before, the CLI stopped after 120 polls — under nine minutes — and a deploy with a long build "timed out after polling" while it was still going.)
+**How long it waits:** as long as the server lets the job run, and a minute more — two hours for `deploy` (the frontend build of a release alone has 30 minutes, and up to an hour where the app asks for it), ten minutes for every other command. A job the API stops there ends as failed and the CLI says why. If the wait itself is over first, the command says that the job is still running and how to pick it up again: `cipi-cli jobs wait <id>`, which waits for as long as a deploy may take. (Before, the CLI stopped after 120 polls — under nine minutes — and a deploy with a long build "timed out after polling" while it was still going.)
 
 ## Releases
 

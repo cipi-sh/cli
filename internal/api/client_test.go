@@ -165,8 +165,8 @@ func TestJobWaits(t *testing.T) {
 	if JobWait <= 10*time.Minute || JobWait > 15*time.Minute {
 		t.Fatalf("JobWait = %s: a job has ten minutes on the server, the wait a little more", JobWait)
 	}
-	if DeployJobWait <= 60*time.Minute || DeployJobWait > 70*time.Minute {
-		t.Fatalf("DeployJobWait = %s: a deploy has an hour on the server, the wait a little more", DeployJobWait)
+	if DeployJobWait <= 120*time.Minute || DeployJobWait > 130*time.Minute {
+		t.Fatalf("DeployJobWait = %s: a deploy has two hours on the server, the wait a little more", DeployJobWait)
 	}
 	for n, want := range map[int]time.Duration{0: 2 * time.Second, 10: 2 * time.Second, 11: 3 * time.Second, 30: 3 * time.Second, 31: 5 * time.Second, 900: 5 * time.Second} {
 		if got := jobPollInterval(n); got != want {

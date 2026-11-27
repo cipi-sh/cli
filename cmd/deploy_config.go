@@ -16,7 +16,13 @@ var deployConfigCmd = &cobra.Command{
 Requires Cipi 5.0.3+ and the apps-deploy-config token ability.
 
   cipi-cli deploy config show myapp
-  cipi-cli deploy config set myapp --keep-releases 5 --migrate`,
+  cipi-cli deploy config set myapp --keep-releases 5 --migrate
+  cipi-cli deploy config set myapp --build-timeout 2700 --step-timeout 600
+
+--build-timeout and --step-timeout (Cipi 5.18.0+) are seconds: how long the
+frontend build of a deploy may run (60-3600, 1800 unless set) and how long
+every other command may (60-1800, 300 unless set). A Node app takes
+--keep-releases, --predeploy-snapshot and these two.`,
 }
 
 var deployConfigShowCmd = &cobra.Command{
@@ -56,6 +62,19 @@ var deployConfigSetCmd = &cobra.Command{
 		body := map[string]interface{}{}
 		changed := false
 
+		for _, clock := range deployClocks {
+			if !cmd.Flags().Changed(clock.flag) {
+				continue
+			}
+			v, _ := cmd.Flags().GetInt(clock.flag)
+			seconds, err := deployClockSeconds(clock, v)
+			if err != nil {
+				output.Error("%s", err)
+				return err
+			}
+			body[clock.field] = seconds
+			changed = true
+		}
 		if cmd.Flags().Changed("keep-releases") {
 			v, _ := cmd.Flags().GetInt("keep-releases")
 			body["keep_releases"] = v
@@ -181,6 +200,8 @@ func snakeFlag(name string) string {
 
 func init() {
 	deployConfigSetCmd.Flags().Int("keep-releases", 0, "Number of releases to keep")
+	deployConfigSetCmd.Flags().Int("build-timeout", 0, "Seconds the frontend build may run, 60-3600 (1800 unless set; Cipi 5.18.0+)")
+	deployConfigSetCmd.Flags().Int("step-timeout", 0, "Seconds every other command of a deploy may run, 60-1800 (300 unless set; Cipi 5.18.0+)")
 	deployConfigSetCmd.Flags().Bool("migrate", false, "Run migrations on deploy")
 	deployConfigSetCmd.Flags().Bool("optimize", false, "Run optimize on deploy")
 	deployConfigSetCmd.Flags().Bool("storage-link", false, "Run storage:link on deploy")
