@@ -117,6 +117,8 @@ cipi-cli deploy --help
 cipi-cli apps list                          List all applications (ENV column: environment label)
 cipi-cli apps show <name>                   Show application details
 cipi-cli apps create [flags]                Create a new application
+                                            --custom / --node: --db NAME creates a database with the app and links it
+                                            (5.18.0+; --engine picks its engine). A Laravel app has its own.
 cipi-cli apps edit <name> [flags]           Edit an application
 cipi-cli apps delete <name> [-y]            Delete an application
 cipi-cli apps suspend <name>                Suspend an application (HTTP 503)

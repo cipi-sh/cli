@@ -265,3 +265,26 @@ func TestDeployClocks(t *testing.T) {
 		}
 	}
 }
+
+func TestAppCreateDB(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		laravel bool
+		want    string
+	}{{"", false, ""}, {"", true, ""}, {"  ", false, ""}, {"wpblog", false, "wpblog"}, {" front_db2 ", false, "front_db2"}} {
+		if got, err := appCreateDB(tc.name, tc.laravel); err != nil || got != tc.want {
+			t.Errorf("appCreateDB(%q, %v) = %q, %v; want %q", tc.name, tc.laravel, got, err, tc.want)
+		}
+	}
+	for _, bad := range []string{"WP", "1abc", "a", "bad-name", "x; id", strings.Repeat("a", 65)} {
+		if _, err := appCreateDB(bad, false); err == nil || !strings.Contains(err.Error(), "is not a database name") {
+			t.Errorf("appCreateDB(%q) error = %v, want a refusal", bad, err)
+		}
+	}
+	if _, err := appCreateDB("extra", true); err == nil || !strings.Contains(err.Error(), "a Laravel app is created with its own database") {
+		t.Errorf("a Laravel app must refuse --db, got %v", err)
+	}
+	if appsCreateCmd.Flags().Lookup("db") == nil {
+		t.Error("apps create has no --db")
+	}
+}
