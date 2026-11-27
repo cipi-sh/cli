@@ -527,6 +527,37 @@ cipi-cli zt leave
 
 `packages install|remove` are async jobs on the server's **closed catalog** (Cipi 5.14.0): `image-optimizers`, `avif`, `ffmpeg`, `imagemagick`, `poppler-utils`, `browsershot` (the libraries and fonts the Chrome Puppeteer downloads needs — Chrome itself comes with `npm install puppeteer` in the app), `fonts-cjk`, `pdftk`, `libreoffice` (headless), `pandoc`, `tesseract`, and the security scanners [Hackly](https://github.com/andreapollastri/hackly) runs: `sec-recon` (nmap, dig, whois) and `sec-gitleaks` from Ubuntu; `sec-nuclei`, `sec-zap`, `sec-nikto`, `sec-wpscan`, `sec-trivy`, `sec-semgrep`, `sec-checkov` as upstream releases Cipi pins by version and SHA-256. The list shows what each entry brings (`ffmpeg, ffprobe`, or *libraries*), its VERSION (`ubuntu`, or the pinned one — `2.16.1 → 2.17.0` when an older one is installed) and, for a partial install, what is missing — `install` completes a partial entry and updates an outdated one. `remove` asks for confirmation unless `-y`; a library entry keeps whatever other software still uses. Requires Cipi 5.14.0+, API 1.44+ and the `packages-manage` ability.
 
+### Transfers between servers
+
+```
+cipi-cli sync push [app...] --to <profile>      Send apps to another server of yours and import them there (5.18.0+)
+cipi-cli sync push [app...] --host <address>    …to a server that is not a profile (it must trust this server's key)
+                                                [--port 22 --with-db --with-storage --keep-trust -y]
+cipi-cli sync check <host> [--port 22]          Can this server send to that one: key accepted, Cipi answers
+cipi-cli sync key [--raw]                       This server's sync key
+cipi-cli sync trust [key]                       Let another server send apps here  [--from <profile> | --key-file <file>]
+cipi-cli sync untrust [key]                     Take that key back out             [--from <profile> | --key-file <file>]
+```
+
+`sync` copies apps from one Cipi server to another — a move to a bigger machine, production copied onto staging, a second server kept ready. **The server of the profile in use is the source**: it exports the apps (settings, `.env`, deploy recipe, workers, crons — and databases and uploaded files when asked), encrypts the archive, sends it over SSH and has the target import it. Apps that are not on the target are created there; apps that are, updated. Nothing is removed or stopped on the source, and DNS is yours to move.
+
+```bash
+cipi-cli prod sync push --to staging --with-db            # every app of prod, onto the server of the staging profile
+cipi-cli prod sync push shop blog --to staging --with-db --with-storage
+cipi-cli prod sync push --to new --host 10.0.0.12         # same, over a private address
+cipi-cli prod sync push shop --host 203.0.113.9           # a server that is not a profile
+```
+
+- **`--to <profile>` does the preparation**: this server's key is added on the target, the way is checked, the transfer runs, and the key is taken out again when it ends — whatever its end. `--keep-trust` leaves it, for transfers that repeat; a key that was trusted before is left where it was. The address is the host of that profile's endpoint unless `--host` names another (a private or mesh address, or the real one of a server whose API sits behind a proxy).
+- **`--host` alone** is for a server this client has no profile for. It has to trust the source first: `cipi-cli sync key` here, `cipi sync trust` there.
+- **Nothing starts before a check**: the source is asked whether the target accepts its key and runs a Cipi that can take the transfer, and the answer is said in words — not trusted yet, no SSH answer at that address, a host key that changed, SSH but no Cipi, a Cipi too old. `sync check` asks the same without sending anything.
+- **Encryption is the server's**: the archive is encrypted (AES-256) with a passphrase the source makes for that one transfer and hands to the target over the same SSH connection. There is no flag for it: it is never shown and never passes through this client or the API. The archive is removed from both servers when the import ends.
+- **`--with-db`** dumps the databases on the source and restores them on the target, **replacing the database of an app that is already there**. **`--with-storage`** adds each app's `shared/storage`, which can be large. Without either, an app arrives with its settings and an empty database.
+- The transfer is an async job, followed for up to two hours; its output is printed when it ends. `-y` skips the confirmation.
+- **`sync trust` gives the holder of that key a shell as `cipi` on the server**: only the key of a server of yours. `--from <profile>` reads the key from that server, so nothing is copied by hand: `cipi-cli staging sync trust --from prod`.
+
+Requires Cipi 5.18.0+ on both servers, cipi/api 1.48+ and the `sync-manage` ability — on the source, and on the target for `--to`, `trust` and `untrust`. `sync-manage` is as strong as `ssh-manage`: whoever holds it can have the server send its apps, databases included, to a host of their choosing. Exports to a file (`cipi sync export|import|list`) stay at the server's shell.
+
 ### IP whitelist
 
 ```
@@ -668,6 +699,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Page cache (`cache`), Octane PHP (`octane show|php|restart`), Valkey per app (`valkey`), notification time zone and server name (`notifications settings|timezone|server-name`) | 5.17.0 | 1.47+ (no new ability: `nginx-*`, `php-*`, `services-*`, `notifications-*`) |
 | The mesh network in `zt` (Tailscale, NetBird: address, peers, node key, locks, warnings) | 5.18.0 | 1.48+ (`zt-view`, no new ability) |
 | Managing the mesh (`zt join`, `zt leave`, `zt lock`, `zt unlock`, `zt ssh`) | 5.18.0 | 1.48+ (`zt-manage`) |
+| Transfers between servers (`sync push`, `sync check`, `sync key`, `sync trust`, `sync untrust`) | 5.18.0 | 1.48+ (`sync-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
