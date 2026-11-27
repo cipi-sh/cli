@@ -489,9 +489,33 @@ cipi-cli packages                           Optional host packages: the catalog 
 cipi-cli packages install <id>              Install an entry, e.g. browsershot, libreoffice (5.14.0+)
 cipi-cli packages remove <id> [-y]          Remove an entry, and only what nothing else needs (5.14.0+)
 cipi-cli zt                                 Zero Trust status: Cloudflare Tunnel (5.3.0+) and the mesh network — Tailscale, NetBird (5.18.0+)
+cipi-cli zt join <tailscale|netbird>        Put the server on a mesh network (5.18.0+)  [--key-file --hostname --tags --control-url --direct --adopt …]
+cipi-cli zt lock <ssh|http> [-y]            Close SSH, or 80/443, to the world: open on the mesh only (5.18.0+)
+cipi-cli zt unlock <ssh|http>               Reopen it (5.18.0+)
+cipi-cli zt ssh <on|off>                    Tailscale SSH (5.18.0+)
+cipi-cli zt leave [-y]                      Take the server off the network: reopens what the locks closed (5.18.0+)
 ```
 
-`zt` reads both sides of Zero Trust. Cloudflare Tunnel publishes the sites; a mesh network — Tailscale or NetBird — is how the people who run the server reach it. The tunnel's lines come first (state as Cloudflare sees it, locks, how many hostnames); then the mesh: connected or not and the client's own word for why, the server's address and name on the network, peers online, the node key's expiry (Tailscale), the command to SSH in over it, whether port 22 and 80/443 are closed to the world, and the server's warnings. `--json` has everything the server said, hostnames and Access included. Joining a network and the locks are not here: `cipi zt tailscale|netbird …` on the server.
+`zt` reads both sides of Zero Trust. Cloudflare Tunnel publishes the sites; a mesh network — Tailscale or NetBird — is how the people who run the server reach it. The tunnel's lines come first (state as Cloudflare sees it, locks, how many hostnames); then the mesh: connected or not and the client's own word for why, the server's address and name on the network, peers online, the node key's expiry (Tailscale), the command to SSH in over it and the last SSH login the server saw come over the mesh, whether port 22 and 80/443 are closed to the world, the server's warnings, how this client reaches the server (`via mesh`, `tunnel`, `public`…) and, on `refused` lines, what the server would not do from here and why. `--json` has everything the server said, hostnames and Access included.
+
+**The mesh is managed from here too** (Cipi 5.18.0+, cipi/api 1.48+, ability `zt-manage`); Cloudflare's tunnel is changed at the server's shell (`cipi zt`).
+
+```bash
+cipi-cli zt join tailscale --tags cipi          # asks for the auth key; a tagged machine's key never expires
+cipi-cli zt join netbird --key-file ~/nb.key --control-url https://netbird.example.com
+cipi-cli zt                                     # the address on the network: ssh cipi@100.x.y.z once, from a device of it
+cipi-cli zt lock ssh                            # port 22 from the network only
+cipi-cli zt lock http                           # 80/443 too — private sites, or sites published through Cloudflare
+cipi-cli zt unlock http
+cipi-cli zt leave
+```
+
+- **`zt join`** installs the client on the server, signs in and lets the mesh through the firewall; it closes nothing and takes a minute or two. The key is asked for at a prompt, read from `--key-file`, or given with `--key` (which leaves it in the shell's history); the server uses it once and keeps it nowhere. `--adopt` takes a client that is already installed and connected on the server. Options: `--hostname`, `--control-url` (a Headscale, a self-hosted NetBird), `--direct` (also open the client's UDP port), `--accept-dns`, `--accept-routes`, and for Tailscale `--tags`, `--ssh`, `--reauth`.
+- **`zt lock ssh|http`** asks for confirmation (`-y` skips it). **The server refuses what would lock people out, and says why** — there is no `--force` over the API: `ssh` until sshd has accepted a login that came over the mesh, while the node key can expire, with the firewall off, or with Tailscale SSH on; `http` while an app renews its certificate over HTTP-01, and when this client reaches the API on the public address the lock would close. For that last one, point the profile's endpoint at the server's mesh name or address (or at its hostname on the Cloudflare tunnel) and run it again.
+- **`zt leave`** is refused when this client reaches the server over the mesh itself; that is done at the server's shell.
+- **`zt ssh on|off`** is Tailscale SSH: the tailnet's policy says who signs in. Tailscale only.
+
+`zt-manage` is as strong as `ssh-manage` — whoever holds it can put the server on a network of their own. A token made with a list of abilities does not have it until it is created again with `zt-manage` in the list; a `--full-access` token has it.
 
 `node install|upgrade|default|remove` are async jobs and take even (LTS) majors only — the CLI rejects anything else before calling the server. `node upgrade --restart` moves the SSR apps on the upgraded runtime to the new binary blue/green; without it they take it at their next deploy. Requires Cipi 5.9.0+, API 1.39+ and the `node-runtimes-manage` ability — existing tokens do not get it.
 
@@ -635,6 +659,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Optional packages install / remove (`packages install`, `packages remove`), PROVIDES, VERSION and missing in `packages` | 5.14.0 | 1.44+ (`packages-manage`) |
 | Page cache (`cache`), Octane PHP (`octane show|php|restart`), Valkey per app (`valkey`), notification time zone and server name (`notifications settings|timezone|server-name`) | 5.17.0 | 1.47+ (no new ability: `nginx-*`, `php-*`, `services-*`, `notifications-*`) |
 | The mesh network in `zt` (Tailscale, NetBird: address, peers, node key, locks, warnings) | 5.18.0 | 1.48+ (`zt-view`, no new ability) |
+| Managing the mesh (`zt join`, `zt leave`, `zt lock`, `zt unlock`, `zt ssh`) | 5.18.0 | 1.48+ (`zt-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 

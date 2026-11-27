@@ -40,20 +40,29 @@ Requires Cipi 5.3.0+ and monitor-view ability.`,
 
 var ztCmd = &cobra.Command{
 	Use:   "zt",
-	Short: "Show Zero Trust status (Cloudflare Tunnel, Tailscale, NetBird)",
-	Long: `Read-only Zero Trust status from GET /api/zt.
+	Short: "Zero Trust: status (Cloudflare Tunnel, Tailscale, NetBird) and the mesh network",
+	Long: `Zero Trust status from GET /api/zt, and the mesh network managed.
 
 Cloudflare Tunnel publishes the sites; a mesh network (Tailscale or NetBird)
 is how the people who run the server reach it. Both are shown: the tunnel and
 its locks, and the mesh — connected or not, the server's address on it, peers,
-the node key's expiry, how to SSH in over it, and its own locks.
+the node key's expiry, how to SSH in over it, the last SSH login over it, its
+own locks, how this client reaches the server and what the server would
+refuse from here ("refused" lines).
+
+  cipi-cli zt                          the status
+  cipi-cli zt join tailscale|netbird   put the server on a network
+  cipi-cli zt lock ssh|http            close a port to the world
+  cipi-cli zt unlock ssh|http          reopen it
+  cipi-cli zt ssh on|off               Tailscale SSH
+  cipi-cli zt leave                    take the server off the network
 
 --json prints everything the server said, including hostnames, Access,
 service tokens and TCP services.
 
 Requires Cipi 5.3.0+ and zt-view ability; the mesh needs Cipi 5.18.0+ and
-cipi/api 1.48+. Every change stays on the server: cipi zt, cipi zt tailscale,
-cipi zt netbird.`,
+cipi/api 1.48+, and changing it the zt-manage ability. Cloudflare's tunnel is
+changed on the server: cipi zt.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := mustClient()
 		if err != nil {
@@ -88,7 +97,7 @@ cipi zt netbird.`,
 		if rows := ztMeshRows(data); rows != nil {
 			output.Header("Zero Trust — mesh network")
 			for _, row := range rows {
-				if row.Label == "warning" {
+				if row.Label == "warning" || row.Label == "refused" {
 					output.Warn("%s", row.Value)
 					continue
 				}
