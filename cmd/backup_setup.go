@@ -12,11 +12,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Backups set up and managed from here (cipi/api 1.49, Cipi 5.19.0): where
-// they go — this server only, the default bucket or an SFTP server — S3
-// buckets as destinations of their own, the encryption key, the retention.
-// A secret key is read from a prompt, a file or stdin — never a flag — and
-// sent once: the API writes it to the CLI's standard input on the server.
+// Backups set up and managed from here (cipi/api 1.49, Cipi 5.19.0): on the
+// server first (the local folder and the nightly profile), then S3 buckets
+// and SFTP servers on a par — each with a name, the profiles to send there
+// chosen when it is added — the encryption key, the retention. A secret key
+// is read from a prompt, a file or stdin — never a flag — and sent once: the
+// API writes it to the CLI's standard input on the server.
 
 const backupSetupAPI = "1.49"
 
@@ -29,7 +30,7 @@ var (
 	s3CredRe = regexp.MustCompile(`^[\x21\x23-\x26\x28-\x5b\x5d-\x7e]{1,256}$`)
 )
 
-// s3Body is the body of an S3 destination or of the default bucket: only what
+// s3Body is the body of an S3 destination: only what
 // is given. A new one needs its bucket, key and secret; a change keeps what is
 // left out. An endpoint given empty on a change is "none" (back to AWS).
 func s3Body(bucket, key, secret, region, endpoint string, endpointSet, create bool) (map[string]interface{}, error) {
@@ -135,12 +136,13 @@ func s3Save(cmd *cobra.Command, name string, create bool) error {
 		body, err = s3Body(bucket, key, secret, region, endpoint, cmd.Flags().Changed("endpoint"), create)
 		if err == nil {
 			if create {
-				if !sftpNameRe.MatchString(name) || name == "local" || name == "s3" {
-					err = fmt.Errorf("name: lowercase letters, digits and dashes, 2 to 32 — not local or s3 (the default bucket is \"backup configure\")")
+				if !sftpNameRe.MatchString(name) || name == "local" {
+					err = fmt.Errorf("name: lowercase letters, digits and dashes, 2 to 32 — not local (this server)")
 				}
 				body["type"], body["name"] = "s3", name
-			} else if name == "s3" {
-				err = fmt.Errorf("'s3' is the default bucket: cipi-cli backup configure --type s3 …")
+			}
+			if err == nil {
+				err = addUse(cmd, body)
 			}
 			if err == nil {
 				return s3Send(name, body, create)
@@ -195,85 +197,44 @@ func s3Send(name string, body map[string]interface{}, create bool) error {
 	return nil
 }
 
-// setupBody is the body of PUT /api/backups/config: where backups go.
-func setupBody(cmd *cobra.Command) (map[string]interface{}, error) {
-	typ, _ := cmd.Flags().GetString("type")
-	if lo, _ := cmd.Flags().GetBool("local-only"); lo {
-		if typ != "" && typ != "local" {
-			return nil, fmt.Errorf("--local-only is --type local")
+// useProfiles reads --use: the profiles sent to a new destination too.
+func useProfiles(v string) ([]string, error) {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p == "" {
+			continue
 		}
-		typ = "local"
+		if !sftpNameRe.MatchString(p) {
+			return nil, fmt.Errorf("--use: profile names, comma-separated")
+		}
+		out = append(out, p)
 	}
-	if typ == "" {
-		switch {
-		case s3FlagsGiven(cmd):
-			typ = "s3"
-		case cmd.Flags().Changed("host") || cmd.Flags().Changed("user"):
-			typ = "sftp"
-		default:
-			return nil, fmt.Errorf("say where backups go: --type local, --type s3 --bucket … --key …, or --type sftp --host … --user …")
-		}
+	return out, nil
+}
+
+// addUse puts --use into the body of a new or changed destination.
+func addUse(cmd *cobra.Command, body map[string]interface{}) error {
+	v, _ := cmd.Flags().GetString("use")
+	profiles, err := useProfiles(v)
+	if err != nil {
+		return err
 	}
-	switch typ {
-	case "local":
-		return map[string]interface{}{"type": "local"}, nil
-	case "s3":
-		bucket, _ := cmd.Flags().GetString("bucket")
-		key, _ := cmd.Flags().GetString("key")
-		region, _ := cmd.Flags().GetString("region")
-		endpoint, _ := cmd.Flags().GetString("endpoint")
-		if bucket == "" {
-			return nil, fmt.Errorf("--type s3 needs --bucket (and --key, and the secret key on a first setup)")
-		}
-		// The secret is asked when a key is given: a new key goes with its secret.
-		secret, err := s3Secret(cmd, key != "")
-		if err != nil {
-			return nil, err
-		}
-		body, err := s3Body(bucket, key, secret, region, endpoint, cmd.Flags().Changed("endpoint"), false)
-		if err != nil {
-			return nil, err
-		}
-		body["type"] = "s3"
-		return body, nil
-	case "sftp":
-		host, _ := cmd.Flags().GetString("host")
-		port, _ := cmd.Flags().GetInt("port")
-		user, _ := cmd.Flags().GetString("user")
-		path, _ := cmd.Flags().GetString("path")
-		name, _ := cmd.Flags().GetString("name")
-		body, err := sftpBody(name, host, port, user, path, true, true, true)
-		if err != nil {
-			return nil, err
-		}
-		body["type"] = "sftp"
-		return body, nil
+	if len(profiles) > 0 {
+		body["profiles"] = profiles
 	}
-	return nil, fmt.Errorf("--type is local, s3 or sftp")
+	return nil
 }
 
 var backupConfigureCmd = &cobra.Command{
 	Use:   "configure",
-	Short: "Set up backups: this server only, an S3 bucket or an SFTP server",
-	Long: `Say where backups go — "cipi backup configure" on the server. A first setup
-makes the nightly profile, sent there: every app and every database.
+	Short: "Set up backups on the server: the local folder and a nightly profile",
+	Long: `Set up backups on the server — "cipi backup configure" there: a nightly
+profile takes every app and every database and keeps them on the server.
+Then send them elsewhere too — S3 buckets and SFTP servers, on a par:
 
-  cipi-cli backup configure --type s3 --bucket acme-backups --key AKIA… --endpoint https://fsn1.your-objectstorage.com
-  cipi-cli backup configure --type sftp --host u1234.your-storagebox.de --port 23 --user u1234 --path cipi
-  cipi-cli backup configure --type local
-
-s3: the default bucket — "s3" in a profile's destinations. The server reaches
-it with the keys before it saves anything. The secret key is asked at a
-prompt (--secret-file or --secret-stdin to read it) and sent once: it never
-rides a command line, on this machine or on the server. On a server already
-set up, a key or a secret left out stays as it is; --region or --endpoint
-alone change just that ("--endpoint none": back to AWS).
-
-sftp: an SFTP server — "sftp" in profiles (--name for another). Cipi makes
-an SSH key for it and this prints it with how to install it; then
-"cipi-cli backup destination test sftp". No password. Cipi 5.19.1+.
-
-local: this server only. Such a copy is lost with the server.
+  cipi-cli backup configure
+  cipi-cli backup destination add s3 --bucket acme-backups --key AKIA… --endpoint https://fsn1.your-objectstorage.com --use default
+  cipi-cli backup destination add sftp --host u1234.your-storagebox.de --port 23 --user u1234 --use default
 
 The local and temp folders are set on the server.
 
@@ -282,37 +243,12 @@ Requires Cipi 5.19.0+, cipi/api 1.49+ and the backups-manage ability.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		body, err := setupBody(cmd)
-		if err != nil {
-			output.Error("%s", err)
-			return err
-		}
-		if body["type"] == "local" && !jsonFlag {
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes && !output.Confirm("Keep backups on this server only? They do not survive losing the server.") {
-				output.Warn("Aborted")
-				return nil
-			}
-		}
 		client, err := mustClient()
 		if err != nil {
 			return err
 		}
-		if body["type"] == "s3" {
-			output.Info("Reaching the bucket with its keys — nothing is saved if it does not answer...")
-		}
-		var answer struct {
-			Type        string `json:"type"`
-			Destination *struct {
-				Name      string `json:"name"`
-				Host      string `json:"host"`
-				Port      int    `json:"port"`
-				User      string `json:"user"`
-				Path      string `json:"path"`
-				PublicKey string `json:"public_key"`
-			} `json:"destination"`
-		}
-		if err := client.Put("/api/backups/config", body, &answer); err != nil {
+		var answer json.RawMessage
+		if err := client.Put("/api/backups/config", map[string]interface{}{}, &answer); err != nil {
 			output.Error("Failed to set up backups: %s", featureErrorHint(err, backupSetupAPI, "backups-manage"))
 			return err
 		}
@@ -320,26 +256,10 @@ Requires Cipi 5.19.0+, cipi/api 1.49+ and the backups-manage ability.`,
 			output.PrintJSON(answer)
 			return nil
 		}
-		switch body["type"] {
-		case "local":
-			output.Success("Backups set up — on this server only")
-		case "s3":
-			output.Success("Backups set up — the default bucket is s3://%v", body["bucket"])
-		case "sftp":
-			if d := answer.Destination; d != nil {
-				output.Success("Backups set up — to the SFTP server %s: sftp://%s@%s:%d/%s", d.Name, d.User, d.Host, d.Port, d.Path)
-				fmt.Println()
-				fmt.Println("The remote has to accept this key — Cipi signs in with it, never with a password:")
-				fmt.Println("  " + d.PublicKey)
-				fmt.Println()
-				for _, line := range sftpInstallHint(d.Name, d.Host, d.Port, d.User, d.PublicKey) {
-					fmt.Println(line)
-				}
-				fmt.Println()
-				output.Info("Then: cipi-cli backup destination test %s", d.Name)
-			}
-		}
-		output.Info("Review it: cipi-cli backup status")
+		output.Success("Backups set up on the server: a nightly profile keeps every app and database there")
+		output.Info("A copy only on the server is lost with it — send it elsewhere too:")
+		fmt.Println("  cipi-cli backup destination add s3 --bucket <b> --key <id> [--endpoint <url>] --use default")
+		fmt.Println("  cipi-cli backup destination add sftp --host <host> --user <user> [--port 23] --use default")
 		fmt.Println()
 		return nil
 	},
@@ -470,22 +390,12 @@ func addS3Flags(c *cobra.Command) {
 	c.Flags().Bool("secret-stdin", false, "S3: read the secret key from standard input (first line)")
 }
 
-func addConfigureFlags(c *cobra.Command) {
-	addS3Flags(c)
-	c.Flags().String("type", "", "Where backups go: local, s3 or sftp")
-	c.Flags().Bool("local-only", false, "This server only (--type local)")
-	c.Flags().String("host", "", "SFTP: the server")
-	c.Flags().Int("port", 22, "SFTP: SSH port (23 for a Hetzner Storage Box)")
-	c.Flags().String("user", "", "SFTP: the user on the remote")
-	c.Flags().String("path", "", "SFTP: folder on the remote (empty: the login's home)")
-	c.Flags().String("name", "sftp", "SFTP: its name in profiles")
-	c.Flags().BoolP("yes", "y", false, "Skip confirmation (--type local)")
-}
-
 func init() {
 	addS3Flags(backupDestinationAddCmd)
 	addS3Flags(backupDestinationEditCmd)
-	addConfigureFlags(backupConfigureCmd)
+	for _, c := range []*cobra.Command{backupDestinationAddCmd, backupDestinationEditCmd} {
+		c.Flags().String("use", "", "Send these profiles there too: default[,…] (Cipi 5.19.1+)")
+	}
 	backupKeyRotateCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
 	backupPruneCmd.Flags().String("profile", "", "Only this profile")
 	backupPruneCmd.Flags().Bool("dry-run", false, "List what would be deleted, delete nothing")

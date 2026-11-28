@@ -334,8 +334,8 @@ cipi-cli backup profile edit <name> [flags]
 cipi-cli backup profile enable|disable <name>
 cipi-cli backup profile remove <name> [-y]
 cipi-cli backup destination test [name]     Can the server reach each destination; exits 1 when one fails
-cipi-cli backup configure --type local|s3|sftp [flags]   Where backups go (5.19.0+)
-cipi-cli backup destination add|edit|key|remove …        S3 buckets (5.19.0+) and SFTP servers (5.18.0+)
+cipi-cli backup configure                   Set up backups on the server (5.19.0+)
+cipi-cli backup destination add|edit|key|remove …        S3 buckets (5.19.0+) and SFTP servers (5.18.0+), on a par
 cipi-cli backup key show|rotate             The encryption key (5.19.0+)
 cipi-cli backup prune [--profile P] [--dry-run]          Apply the retention now (async job, 5.19.0+)
 ```
@@ -549,17 +549,16 @@ A server reached over SSH is a backup destination next to `local` and the S3 one
 ### Backups set up from here
 
 ```
-cipi-cli backup configure --type s3 --bucket <b> --key <id> [--region R] [--endpoint URL]   The default bucket ('s3')
-cipi-cli backup configure --type sftp --host <h> --user <u> [--port 22] [--path <dir>] [--name sftp]   (5.19.1+)
-cipi-cli backup configure --type local [-y]                     This server only
-cipi-cli backup destination add <name> --bucket <b> --key <id> [--region R] [--endpoint URL]   Another bucket
-cipi-cli backup destination edit <name> [--bucket] [--key] [--region] [--endpoint URL|none]
+cipi-cli backup configure                                       On the server: the local folder and a nightly profile
+cipi-cli backup destination add <name> --bucket <b> --key <id> [--region R] [--endpoint URL] [--use P,…]   An S3 bucket
+cipi-cli backup destination add <name> --host <h> --user <u> [--port 22] [--path <dir>] [--use P,…]        An SFTP server
+cipi-cli backup destination edit <name> [--bucket] [--key] [--region] [--endpoint URL|none] [--use P,…]
 cipi-cli backup key show                                        The encryption key (logged and notified on the server)
 cipi-cli backup key rotate [-y]                                 A new key for the runs to come
 cipi-cli backup prune [--profile P] [--dry-run]                 Apply the retention now
 ```
 
-`configure` says where backups go; a first setup makes the nightly profile, sent there. **A secret key is never a flag** (it would stay in the shell's history): it is asked at a prompt, not shown as it is typed, or read from the first line of `--secret-file <path>` or of standard input (`--secret-stdin`), and sent once — the server reads it on its standard input, and no answer carries it back. On a change, a key or a secret left out stays as the server has it; a new `--key` asks for the secret that goes with it. **Every bucket is reached with its keys before anything is saved.** `--endpoint` for every provider but AWS: Hetzner `https://fsn1.your-objectstorage.com`, Cloudflare R2 `https://<account-id>.r2.cloudflarestorage.com` (`--region auto`), DigitalOcean `https://fra1.digitaloceanspaces.com`, Backblaze B2 `https://s3.eu-central-003.backblazeb2.com`, Scaleway `https://s3.fr-par.scw.cloud`, MinIO. The local and temp folders are set on the server. Requires Cipi 5.19.0+, API 1.49+ and `backups-manage`.
+Backups start on the server: `configure` sets up the local folder and a nightly profile that keeps every app and database there. **S3 buckets and SFTP servers are then destinations on a par**, each with a name (`s3`, `offsite`, `sftp`, `box`…); `--use default` sends those profiles there too (Cipi 5.19.1+). **A secret key is never a flag** (it would stay in the shell's history): it is asked at a prompt, not shown as it is typed, or read from the first line of `--secret-file <path>` or of standard input (`--secret-stdin`), and sent once — the server reads it on its standard input, and no answer carries it back. On a change, a key or a secret left out stays as the server has it; a new `--key` asks for the secret that goes with it. **Every bucket is reached with its keys before anything is saved.** `--endpoint` for every provider but AWS: Hetzner `https://fsn1.your-objectstorage.com`, Cloudflare R2 `https://<account-id>.r2.cloudflarestorage.com` (`--region auto`), DigitalOcean `https://fra1.digitaloceanspaces.com`, Backblaze B2 `https://s3.eu-central-003.backblazeb2.com`, Scaleway `https://s3.fr-par.scw.cloud`, MinIO. The local and temp folders are set on the server. Requires Cipi 5.19.0+, API 1.49+ and `backups-manage`.
 
 ### How the server updates Cipi
 
@@ -748,6 +747,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Transfers between servers (`sync push`, `sync check`, `sync key`, `sync trust`, `sync untrust`) | 5.18.0 | 1.48+ (`sync-manage`) |
 | SFTP backup destinations (`backup destination add|edit|key|remove`) | 5.18.0 | 1.48+ (`backups-manage`) |
 | Backups set up from here (`backup configure`), S3 destinations, `backup key show|rotate`, `backup prune`; "not available yet" for signed releases in `updates` | 5.19.0 | 1.49+ (`backups-manage`) |
+| A destination named `s3` like any other, `--use` (send profiles there) | 5.19.1 | 1.49+ (`backups-manage`) |
 | Update policy (`updates`) | 5.18.0 | 1.48+ (`updates-view`, `updates-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).

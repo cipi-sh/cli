@@ -113,6 +113,10 @@ func sftpSave(cmd *cobra.Command, args []string, create bool) error {
 	if newKey {
 		body["new_key"] = true
 	}
+	if err := addUse(cmd, body); err != nil {
+		output.Error("%s", err)
+		return err
+	}
 	client, err := mustClient()
 	if err != nil {
 		return err
@@ -149,13 +153,14 @@ func sftpSave(cmd *cobra.Command, args []string, create bool) error {
 var backupDestinationAddCmd = &cobra.Command{
 	Use:   "add <name> (--bucket … | --host … --user …)",
 	Short: "Add a destination: an S3 bucket, or an SFTP server",
-	Long: `Add a backup destination with a name of its own — profiles send archives
-to it next to "local" and "s3" (the default bucket).
+	Long: `Add a backup destination with a name of its own — an S3 bucket or an SFTP
+server, on a par; profiles send archives to it next to "local" (this server).
+--use sends these profiles there too.
 
 An S3 bucket — AWS, Hetzner, Cloudflare R2, DigitalOcean Spaces, Backblaze
 B2, Scaleway, MinIO… (--endpoint for every provider but AWS):
 
-  cipi-cli backup destination add offsite --bucket acme-offsite --key AKIA… --endpoint https://<account-id>.r2.cloudflarestorage.com --region auto
+  cipi-cli backup destination add s3 --bucket acme-backups --key AKIA… --endpoint https://<account-id>.r2.cloudflarestorage.com --region auto --use default
 
 The secret key is asked at a prompt (--secret-file or --secret-stdin to read
 it) and sent once: it never rides a command line. The server reaches the
@@ -164,7 +169,7 @@ bucket with the keys before it saves anything. Cipi 5.19.0+, cipi/api 1.49+.
 An SFTP server — a VPS with a backup user, a Hetzner Storage Box (port 23),
 a NAS:
 
-  cipi-cli backup destination add box --host u1234.your-storagebox.de --port 23 --user u1234 --path cipi
+  cipi-cli backup destination add sftp --host u1234.your-storagebox.de --port 23 --user u1234 --path cipi --use default
   cipi-cli backup destination add vps --host 203.0.113.9 --user backup
 
 Cipi makes a key for it on the server and prints its public half: install it
@@ -190,8 +195,8 @@ var backupDestinationEditCmd = &cobra.Command{
   cipi-cli backup destination edit box --path backups
   cipi-cli backup destination edit box --new-key                a new key: install it on the remote again
 
-An S3 bucket is reached with its keys again before it is saved. The default
-bucket ("s3") is changed with "cipi-cli backup configure --type s3".`,
+An S3 bucket is reached with its keys again before it is saved — the one
+named "s3" like any other. --use sends these profiles there too.`,
 	Args:          cobra.ExactArgs(1),
 	SilenceUsage:  true,
 	SilenceErrors: true,

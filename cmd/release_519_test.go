@@ -28,10 +28,11 @@ func TestS3BodyChecksBeforeAnythingIsSent(t *testing.T) {
 	}
 }
 
-func setupTestCmd(t *testing.T, flags map[string]string) *cobra.Command {
+func destTestCmd(t *testing.T, flags map[string]string) *cobra.Command {
 	t.Helper()
-	c := &cobra.Command{Use: "configure"}
-	addConfigureFlags(c)
+	c := &cobra.Command{Use: "add"}
+	addS3Flags(c)
+	c.Flags().String("use", "", "")
 	for k, v := range flags {
 		if err := c.Flags().Set(k, v); err != nil {
 			t.Fatal(err)
@@ -40,43 +41,41 @@ func setupTestCmd(t *testing.T, flags map[string]string) *cobra.Command {
 	return c
 }
 
-func TestSetupBodySaysWhereBackupsGo(t *testing.T) {
-	b, err := setupBody(setupTestCmd(t, map[string]string{"type": "local"}))
-	if err != nil || len(b) != 1 || b["type"] != "local" {
-		t.Errorf("local: %v %v", b, err)
+func TestUseSendsProfilesThere(t *testing.T) {
+	if p, err := useProfiles(" default, hourly-db ,"); err != nil || strings.Join(p, ",") != "default,hourly-db" {
+		t.Errorf("--use: %v %v", p, err)
 	}
-	if b, err = setupBody(setupTestCmd(t, map[string]string{"local-only": "true"})); err != nil || b["type"] != "local" {
-		t.Errorf("--local-only: %v %v", b, err)
+	if _, err := useProfiles("default;rm"); err == nil {
+		t.Error("--use took a bad name")
 	}
-	b, err = setupBody(setupTestCmd(t, map[string]string{"host": "u1.your-storagebox.de", "port": "23", "user": "u1", "path": "cipi/"}))
-	if err != nil || b["type"] != "sftp" || b["name"] != "sftp" || b["port"] != 23 || b["path"] != "cipi" {
-		t.Errorf("sftp, said by its fields: %v %v", b, err)
+	body := map[string]interface{}{}
+	if err := addUse(destTestCmd(t, map[string]string{"use": "default"}), body); err != nil || len(body["profiles"].([]string)) != 1 {
+		t.Errorf("addUse: %v %v", body, err)
+	}
+	empty := map[string]interface{}{}
+	if err := addUse(destTestCmd(t, nil), empty); err != nil || len(empty) != 0 {
+		t.Errorf("no --use, no profiles: %v", empty)
 	}
 	f, _ := os.CreateTemp(t.TempDir(), "secret")
 	f.WriteString("sEcReT\nnext line\n")
 	f.Close()
-	b, err = setupBody(setupTestCmd(t, map[string]string{"bucket": "acme-backups", "key": "AKIAX", "secret-file": f.Name(), "endpoint": "https://fsn1.your-objectstorage.com"}))
-	if err != nil || b["type"] != "s3" || b["secret"] != "sEcReT" || b["endpoint"] != "https://fsn1.your-objectstorage.com" {
-		t.Errorf("s3, the secret's first line from a file: %v %v", b, err)
-	}
-	if b, err = setupBody(setupTestCmd(t, map[string]string{"type": "s3", "bucket": "acme-backups", "region": "eu-west-1"})); err != nil || b["secret"] != nil || b["key"] != nil || b["region"] != "eu-west-1" {
-		t.Errorf("s3, the region alone: the keys kept: %v %v", b, err)
-	}
-	for _, bad := range []map[string]string{{}, {"type": "nas"}, {"type": "s3"}, {"type": "sftp", "host": "h"}, {"type": "sftp", "host": "h", "user": "u", "name": "s3"}, {"local-only": "true", "type": "s3"}} {
-		if _, err := setupBody(setupTestCmd(t, bad)); err == nil {
-			t.Errorf("taken: %v", bad)
-		}
+	c := destTestCmd(t, map[string]string{"secret-file": f.Name()})
+	if sec, err := s3Secret(c, true); err != nil || sec != "sEcReT" {
+		t.Errorf("the secret's first line from a file: %q %v", sec, err)
 	}
 }
 
 func TestNoSecretFlag(t *testing.T) {
-	for _, c := range []*cobra.Command{backupConfigureCmd, backupDestinationAddCmd, backupDestinationEditCmd} {
+	for _, c := range []*cobra.Command{backupDestinationAddCmd, backupDestinationEditCmd} {
 		if c.Flags().Lookup("secret") != nil {
 			t.Errorf("%s has a --secret flag: it would stay in the shell's history", c.Name())
 		}
-		if c.Flags().Lookup("secret-file") == nil || c.Flags().Lookup("secret-stdin") == nil {
-			t.Errorf("%s: --secret-file and --secret-stdin", c.Name())
+		if c.Flags().Lookup("secret-file") == nil || c.Flags().Lookup("secret-stdin") == nil || c.Flags().Lookup("use") == nil {
+			t.Errorf("%s: --secret-file, --secret-stdin and --use", c.Name())
 		}
+	}
+	if backupConfigureCmd.Flags().Lookup("bucket") != nil || backupConfigureCmd.Flags().Lookup("type") != nil {
+		t.Error("configure sets up the server only: no bucket, no type")
 	}
 	for _, name := range []string{"configure", "key", "prune"} {
 		found := false

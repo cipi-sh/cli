@@ -334,7 +334,7 @@ When:
   --cron "0 2 * * *"            a five-field cron expression (not both)
 
 Where to and for how long:
-  --dest local,s3,offsite       local, s3 (the default bucket) or named destinations
+  --dest local,s3,offsite       local (this server) and destinations by name
   --keep N                      runs to keep
   --keep-days N                 days to keep one run a day
   --keep-weeks N                weeks to keep one run a week
@@ -520,12 +520,12 @@ var backupDestinationCmd = &cobra.Command{
 	Use:     "destination",
 	Aliases: []string{"destinations", "dest"},
 	Short:   "Where archives go: S3 buckets and SFTP servers",
-	Long: `Backup destinations: "local" (this server), "s3" (the default bucket — set
-with "cipi-cli backup configure"), and more with a name of their own — S3
-buckets and SFTP servers. They are listed by "cipi-cli backup status".
+	Long: `Backup destinations: "local" (this server), and S3 buckets and SFTP servers
+on a par, each with a name of its own. They are listed by "cipi-cli backup
+status".
 
-  cipi-cli backup destination add offsite --bucket acme-offsite --key AKIA… --endpoint https://…
-  cipi-cli backup destination add box --host u1234.your-storagebox.de --port 23 --user u1234
+  cipi-cli backup destination add s3 --bucket acme-backups --key AKIA… --endpoint https://… --use default
+  cipi-cli backup destination add sftp --host u1234.your-storagebox.de --port 23 --user u1234 --use default
   cipi-cli backup destination edit offsite --region eu-west-1
   cipi-cli backup destination test [name]
   cipi-cli backup destination key box
@@ -541,7 +541,6 @@ var backupDestinationTestCmd = &cobra.Command{
 	Long: `Check that the server reaches its destinations — each one, or the one
 named ("cipi backup destination test" on the host): an S3 bucket is listed
 with its own credentials, an SFTP server gets a file written and removed.
-"s3" is the default bucket.
 
 Exits with status 1 when a destination cannot be listed.
 
