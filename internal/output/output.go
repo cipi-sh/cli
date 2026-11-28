@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fatih/color"
+	"golang.org/x/term"
 )
 
 // ansiEscape matches CSI / OSC sequences used by terminal colors.
@@ -176,8 +177,17 @@ func ReadLine(prompt string) string {
 	return strings.TrimSpace(string(line))
 }
 
+// ReadSecret asks for a secret: at a terminal it is not shown as it is typed.
 func ReadSecret(prompt string) string {
 	Cyan.Printf("  %s: ", prompt)
+	if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
+		b, err := term.ReadPassword(fd)
+		fmt.Println()
+		if err == nil {
+			return strings.TrimSpace(string(b))
+		}
+		return ""
+	}
 	var input string
 	fmt.Scanln(&input)
 	return strings.TrimSpace(input)

@@ -519,21 +519,29 @@ covered counts as not covered in "backup status". Nothing is deleted.
 var backupDestinationCmd = &cobra.Command{
 	Use:     "destination",
 	Aliases: []string{"destinations", "dest"},
-	Short:   "Test the backup destinations",
-	Long: `Backup destinations are created on the server ("cipi backup configure",
-"cipi backup destination add"): the API never takes an S3 secret key. They
-are listed by "cipi-cli backup status" and can be tested from here.
+	Short:   "Where archives go: S3 buckets and SFTP servers",
+	Long: `Backup destinations: "local" (this server), "s3" (the default bucket — set
+with "cipi-cli backup configure"), and more with a name of their own — S3
+buckets and SFTP servers. They are listed by "cipi-cli backup status".
 
-  cipi-cli backup destination test
-  cipi-cli backup destination test offsite`,
+  cipi-cli backup destination add offsite --bucket acme-offsite --key AKIA… --endpoint https://…
+  cipi-cli backup destination add box --host u1234.your-storagebox.de --port 23 --user u1234
+  cipi-cli backup destination edit offsite --region eu-west-1
+  cipi-cli backup destination test [name]
+  cipi-cli backup destination key box
+  cipi-cli backup destination remove offsite
+
+A secret key is asked at a prompt, or read from a file or stdin — never a
+flag — and sent once: the server reads it on its standard input.`,
 }
 
 var backupDestinationTestCmd = &cobra.Command{
 	Use:   "test [name]",
-	Short: "List each S3 destination with its own credentials",
-	Long: `Check that the server reaches its S3 destinations — each one, or the one
-named — by listing it with its own credentials ("cipi backup destination
-test" on the host). "s3" is the default bucket.
+	Short: "Check that the server reaches each destination",
+	Long: `Check that the server reaches its destinations — each one, or the one
+named ("cipi backup destination test" on the host): an S3 bucket is listed
+with its own credentials, an SFTP server gets a file written and removed.
+"s3" is the default bucket.
 
 Exits with status 1 when a destination cannot be listed.
 

@@ -333,7 +333,11 @@ cipi-cli backup profile add <name> --dest local,s3 [flags]
 cipi-cli backup profile edit <name> [flags]
 cipi-cli backup profile enable|disable <name>
 cipi-cli backup profile remove <name> [-y]
-cipi-cli backup destination test [name]     List each S3 destination with its credentials; exits 1 when one fails
+cipi-cli backup destination test [name]     Can the server reach each destination; exits 1 when one fails
+cipi-cli backup configure --type local|s3|sftp [flags]   Where backups go (5.19.0+)
+cipi-cli backup destination add|edit|key|remove …        S3 buckets (5.19.0+) and SFTP servers (5.18.0+)
+cipi-cli backup key show|rotate             The encryption key (5.19.0+)
+cipi-cli backup prune [--profile P] [--dry-run]          Apply the retention now (async job, 5.19.0+)
 ```
 
 Aliases: `backups` → `backup`, `profiles` → `profile`, `destinations` / `dest` → `destination`, `backup list` → `backup runs`.
@@ -342,7 +346,7 @@ The server backups of `cipi backup` on the host. A profile says what a run takes
 
 **Profile flags:** `--scope all|files|db`, `--apps`, `--databases`, `--exclude-databases`, `--exclude-tables` (comma-separated names or globs, e.g. `--exclude-tables "*.jobs,*.sessions"`), `--exclude-paths` (paths left out of the app archives, relative to the app: `storage/app/uploads,*.mp4`, `shop:public/media` for one app only — Cipi 5.13.0+ / API 1.43+), `--every 30m|6h|1d` or `--cron "0 2 * * *"` (not both), `--dest local,s3,<named>` (required on `add`), `--keep`, `--keep-days`, `--keep-weeks`, `--encrypt` (client-side AES-256; `--encrypt=false` turns it off). `profile edit` sends only the flags you pass; an empty exclusion list (`--exclude-tables ""`, `--exclude-paths ""`) clears it. The three `--keep` flags are one retention policy: giving any of them sets the others to 0, so pass together the ones you want.
 
-Destinations are read-only here: adding one takes an S3 secret key, so `cipi backup configure` and `cipi backup destination add|edit|remove` are run on the server, as are fetch, key, prune and `profile remove --purge`.
+Setting backups up and their destinations: below (*Backups set up from here*, *Backups to SFTP*). `backup fetch` (download and decrypt a run) and `profile remove --purge` are run on the server.
 
 Requires Cipi 5.9.0+, API 1.39+ and the `backups-view` (status, runs) / `backups-manage` (everything else) token abilities — existing tokens do not get them.
 
@@ -540,7 +544,22 @@ cipi-cli backup destination test [name]          Write and remove a file there
 cipi-cli backup destination remove <name> [-y]   One no profile uses (its archives stay)
 ```
 
-A server reached over SSH is a backup destination next to `local` and the S3 ones: a VPS with a user of its own for backups, a **Hetzner Storage Box** (`--port 23`), a NAS. Cipi makes a key for it on the server and prints its public half with how to install it — `ssh-copy-id -p 23 -s …` for a Storage Box, the `authorized_keys` line elsewhere. No password is asked for or sent; only SFTP is asked of the remote. A profile names it like any other: `--dest local,box`. S3 buckets are added on the server (`cipi backup destination add`): they take a secret key.
+A server reached over SSH is a backup destination next to `local` and the S3 ones: a VPS with a user of its own for backups, a **Hetzner Storage Box** (`--port 23`), a NAS. Cipi makes a key for it on the server and prints its public half with how to install it — `ssh-copy-id -p 23 -s …` for a Storage Box, the `authorized_keys` line elsewhere. No password is asked for or sent; only SFTP is asked of the remote. A profile names it like any other: `--dest local,box`.
+
+### Backups set up from here
+
+```
+cipi-cli backup configure --type s3 --bucket <b> --key <id> [--region R] [--endpoint URL]   The default bucket ('s3')
+cipi-cli backup configure --type sftp --host <h> --user <u> [--port 22] [--path <dir>] [--name sftp]
+cipi-cli backup configure --type local [-y]                     This server only
+cipi-cli backup destination add <name> --bucket <b> --key <id> [--region R] [--endpoint URL]   Another bucket
+cipi-cli backup destination edit <name> [--bucket] [--key] [--region] [--endpoint URL|none]
+cipi-cli backup key show                                        The encryption key (logged and notified on the server)
+cipi-cli backup key rotate [-y]                                 A new key for the runs to come
+cipi-cli backup prune [--profile P] [--dry-run]                 Apply the retention now
+```
+
+`configure` says where backups go; a first setup makes the nightly profile, sent there. **A secret key is never a flag** (it would stay in the shell's history): it is asked at a prompt, not shown as it is typed, or read from the first line of `--secret-file <path>` or of standard input (`--secret-stdin`), and sent once — the server reads it on its standard input, and no answer carries it back. On a change, a key or a secret left out stays as the server has it; a new `--key` asks for the secret that goes with it. **Every bucket is reached with its keys before anything is saved.** `--endpoint` for every provider but AWS: Hetzner `https://fsn1.your-objectstorage.com`, Cloudflare R2 `https://<account-id>.r2.cloudflarestorage.com` (`--region auto`), DigitalOcean `https://fra1.digitaloceanspaces.com`, Backblaze B2 `https://s3.eu-central-003.backblazeb2.com`, Scaleway `https://s3.fr-par.scw.cloud`, MinIO. The local and temp folders are set on the server. Requires Cipi 5.19.0+, API 1.49+ and `backups-manage`.
 
 ### How the server updates Cipi
 
@@ -551,7 +570,7 @@ cipi-cli updates --verify on --fingerprint SHA256:…     Only releases signed b
 cipi-cli updates --verify off --delay off
 ```
 
-Both safeguards are off by default: every night the server installs the latest Cipi, as before. `--verify on` installs a release only when its tag `v<version>` is signed by a key the server trusts and points at what was downloaded; the first trust takes the fingerprint of a shipped key, compared with the one published at [cipi.sh](https://cipi.sh/docs/self-update#signers). `--delay` installs a new release once the server has seen it for that long. Starting an update is not done from cipi-cli. Abilities `updates-view`, `updates-manage`.
+Both safeguards are off by default: every night the server installs the latest Cipi, as before. **Signed releases are not available yet**: Cipi releases are not signed at the moment, so the server refuses `--verify on` and `updates` says so — use `--delay` meanwhile. Once they are, `--verify on` installs a release only when its tag `v<version>` is signed by a key the server trusts and points at what was downloaded; the first trust takes the fingerprint of a shipped key, compared with the one published at [cipi.sh](https://cipi.sh/docs/self-update#signers). `--delay` installs a new release once the server has seen it for that long. Starting an update is not done from cipi-cli. Abilities `updates-view`, `updates-manage`.
 
 ### Transfers between servers
 
@@ -728,6 +747,7 @@ A token only has the abilities it was created with: a feature added later (backu
 | Managing the mesh (`zt join`, `zt leave`, `zt lock`, `zt unlock`, `zt ssh`) | 5.18.0 | 1.48+ (`zt-manage`) |
 | Transfers between servers (`sync push`, `sync check`, `sync key`, `sync trust`, `sync untrust`) | 5.18.0 | 1.48+ (`sync-manage`) |
 | SFTP backup destinations (`backup destination add|edit|key|remove`) | 5.18.0 | 1.48+ (`backups-manage`) |
+| Backups set up from here (`backup configure`), S3 destinations, `backup key show|rotate`, `backup prune`; "not available yet" for signed releases in `updates` | 5.19.0 | 1.49+ (`backups-manage`) |
 | Update policy (`updates`) | 5.18.0 | 1.48+ (`updates-view`, `updates-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).

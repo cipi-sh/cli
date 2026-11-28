@@ -40,10 +40,11 @@ func updatesDelayHours(v string) (int, error) {
 
 type policyAnswer struct {
 	Data struct {
-		Verify       bool `json:"verify"`
-		DelayHours   int  `json:"delay_hours"`
-		SignersReady bool `json:"signers_ready"`
-		Signers      []struct {
+		Verify         bool  `json:"verify"`
+		SignedReleases *bool `json:"signed_releases"`
+		DelayHours     int   `json:"delay_hours"`
+		SignersReady   bool  `json:"signers_ready"`
+		Signers        []struct {
 			Fingerprint string `json:"fingerprint"`
 			Principal   string `json:"principal"`
 		} `json:"signers"`
@@ -73,7 +74,9 @@ every server within a day. Both are off unless turned on.
   cipi-cli updates --verify on --fingerprint SHA256:…   only releases signed by a trusted key
   cipi-cli updates --verify off --delay off
 
---verify on: a release is installed only when its tag v<version> is signed by
+--verify on: signed releases are not available yet — Cipi releases are not
+signed at the moment, and the server refuses it; use --delay meanwhile. Once
+they are, a release is installed only when its tag v<version> is signed by
 a key the server trusts, and points at what was downloaded. The first time,
 the keys shipped with the release are trusted once --fingerprint matches one
 of them: compare it with the one published at cipi.sh/docs/self-update.
@@ -138,9 +141,12 @@ Requires Cipi 5.18.0+, cipi/api 1.48+, updates-view and updates-manage.`,
 		}
 		d := answer.Data
 		output.Header("How this server updates Cipi")
-		if d.Verify {
+		switch {
+		case d.Verify:
 			output.KeyValue(nil, "Signature", "required")
-		} else {
+		case d.SignedReleases != nil && !*d.SignedReleases:
+			output.KeyValue(nil, "Signature", "not available yet — Cipi releases are not signed at the moment")
+		default:
 			output.KeyValue(nil, "Signature", "not checked (--verify on)")
 		}
 		if d.DelayHours > 0 {

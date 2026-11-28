@@ -10,9 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// SFTP backup destinations (cipi/api 1.48, Cipi 5.18.0): a server over SSH —
-// a VPS with a backup user, a Hetzner Storage Box. Cipi makes the key on the
-// server; no secret goes through this client.
+// Backup destinations: SFTP servers (cipi/api 1.48, Cipi 5.18.0) — a server
+// over SSH, a VPS with a backup user, a Hetzner Storage Box: Cipi makes the
+// key on the server, no secret goes through this client — and S3 buckets
+// (cipi/api 1.49, Cipi 5.19.0, backup_setup.go).
 
 const backupSftpAPI = "1.48"
 
@@ -90,6 +91,15 @@ type sftpAnswer struct {
 }
 
 func sftpSave(cmd *cobra.Command, args []string, create bool) error {
+	// --bucket, --key…: an S3 bucket (cipi/api 1.49, Cipi 5.19.0).
+	if s3FlagsGiven(cmd) {
+		if cmd.Flags().Changed("host") || cmd.Flags().Changed("user") || cmd.Flags().Changed("port") || cmd.Flags().Changed("path") || cmd.Flags().Changed("new-key") {
+			err := fmt.Errorf("an S3 bucket (--bucket …) or an SFTP server (--host …), not both")
+			output.Error("%s", err)
+			return err
+		}
+		return s3Save(cmd, args[0], create)
+	}
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
 	user, _ := cmd.Flags().GetString("user")
@@ -137,23 +147,32 @@ func sftpSave(cmd *cobra.Command, args []string, create bool) error {
 }
 
 var backupDestinationAddCmd = &cobra.Command{
-	Use:   "add <name> --host <host> --user <user>",
-	Short: "Add an SFTP destination: a VPS, a Hetzner Storage Box",
-	Long: `Add a backup destination reached over SSH: a VPS with a user of its own
-for backups, a Hetzner Storage Box (port 23), a NAS.
+	Use:   "add <name> (--bucket … | --host … --user …)",
+	Short: "Add a destination: an S3 bucket, or an SFTP server",
+	Long: `Add a backup destination with a name of its own — profiles send archives
+to it next to "local" and "s3" (the default bucket).
+
+An S3 bucket — AWS, Hetzner, Cloudflare R2, DigitalOcean Spaces, Backblaze
+B2, Scaleway, MinIO… (--endpoint for every provider but AWS):
+
+  cipi-cli backup destination add offsite --bucket acme-offsite --key AKIA… --endpoint https://<account-id>.r2.cloudflarestorage.com --region auto
+
+The secret key is asked at a prompt (--secret-file or --secret-stdin to read
+it) and sent once: it never rides a command line. The server reaches the
+bucket with the keys before it saves anything. Cipi 5.19.0+, cipi/api 1.49+.
+
+An SFTP server — a VPS with a backup user, a Hetzner Storage Box (port 23),
+a NAS:
 
   cipi-cli backup destination add box --host u1234.your-storagebox.de --port 23 --user u1234 --path cipi
   cipi-cli backup destination add vps --host 203.0.113.9 --user backup
 
 Cipi makes a key for it on the server and prints its public half: install it
-on the remote, then "cipi-cli backup destination test <name>". No password is
-asked for or sent. Only SFTP is asked of the remote — a chrooted
-internal-sftp account works.
+on the remote, then "cipi-cli backup destination test <name>". No password.
+Only SFTP is asked of the remote — a chrooted internal-sftp account works.
+Cipi 5.18.0+, cipi/api 1.48+.
 
-An S3 bucket is added on the server (cipi backup destination add): it takes a
-secret key.
-
-Requires Cipi 5.18.0+, cipi/api 1.48+ and the backups-manage ability.`,
+Requires the backups-manage ability.`,
 	Args:          cobra.ExactArgs(1),
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -162,11 +181,17 @@ Requires Cipi 5.18.0+, cipi/api 1.48+ and the backups-manage ability.`,
 
 var backupDestinationEditCmd = &cobra.Command{
 	Use:   "edit <name>",
-	Short: "Change an SFTP destination (--new-key for a new key)",
-	Long: `Change what is given of an SFTP destination; the rest stays.
+	Short: "Change a destination: what is given changes",
+	Long: `Change what is given of a destination; the rest stays.
 
+  cipi-cli backup destination edit offsite --region eu-west-1
+  cipi-cli backup destination edit offsite --key AKIA…          asks the secret that goes with it
+  cipi-cli backup destination edit offsite --endpoint none      back to AWS
   cipi-cli backup destination edit box --path backups
-  cipi-cli backup destination edit box --new-key     a new key: install it on the remote again`,
+  cipi-cli backup destination edit box --new-key                a new key: install it on the remote again
+
+An S3 bucket is reached with its keys again before it is saved. The default
+bucket ("s3") is changed with "cipi-cli backup configure --type s3".`,
 	Args:          cobra.ExactArgs(1),
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -198,7 +223,7 @@ var backupDestinationKeyCmd = &cobra.Command{
 
 var backupDestinationRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
-	Short: "Remove an SFTP destination no profile uses (its archives stay)",
+	Short: "Remove a destination no profile uses (its archives stay)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		yes, _ := cmd.Flags().GetBool("yes")
@@ -215,7 +240,7 @@ var backupDestinationRemoveCmd = &cobra.Command{
 			output.Error("Failed to remove it: %s", featureErrorHint(err, backupSftpAPI, "backups-manage"))
 			return err
 		}
-		output.Success("Destination %s removed — its key is deleted on the server; remove it from the remote's authorized_keys too", args[0])
+		output.Success("Destination %s removed — its archives stay there; an SFTP server's key is deleted on the server: remove it from the remote's authorized_keys too", args[0])
 		return nil
 	},
 }
