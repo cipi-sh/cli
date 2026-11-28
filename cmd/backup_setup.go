@@ -271,7 +271,7 @@ alone change just that ("--endpoint none": back to AWS).
 
 sftp: an SFTP server — "sftp" in profiles (--name for another). Cipi makes
 an SSH key for it and this prints it with how to install it; then
-"cipi-cli backup destination test sftp". No password.
+"cipi-cli backup destination test sftp". No password. Cipi 5.19.1+.
 
 local: this server only. Such a copy is lost with the server.
 

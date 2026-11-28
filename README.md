@@ -550,7 +550,7 @@ A server reached over SSH is a backup destination next to `local` and the S3 one
 
 ```
 cipi-cli backup configure --type s3 --bucket <b> --key <id> [--region R] [--endpoint URL]   The default bucket ('s3')
-cipi-cli backup configure --type sftp --host <h> --user <u> [--port 22] [--path <dir>] [--name sftp]
+cipi-cli backup configure --type sftp --host <h> --user <u> [--port 22] [--path <dir>] [--name sftp]   (5.19.1+)
 cipi-cli backup configure --type local [-y]                     This server only
 cipi-cli backup destination add <name> --bucket <b> --key <id> [--region R] [--endpoint URL]   Another bucket
 cipi-cli backup destination edit <name> [--bucket] [--key] [--region] [--endpoint URL|none]
