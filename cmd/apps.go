@@ -274,6 +274,7 @@ repository.
 		outputDir, _ := cmd.Flags().GetString("output")
 		healthPath, _ := cmd.Flags().GetString("health-path")
 		nodeBuild, _ := cmd.Flags().GetString("node-build")
+		dbName, _ := cmd.Flags().GetString("db")
 
 		// Prompt for missing required fields; once in the interactive flow, also
 		// offer the optional asset build (Laravel apps only).
@@ -303,6 +304,16 @@ repository.
 			nodeBuild = output.ReadLine("Build command, e.g. npm ci && npm run build (optional, Enter to skip)")
 		}
 
+		// A custom or a Node app has no database of its own: one can be made with it.
+		if interactive && !isLaravel && dbName == "" && !cmd.Flags().Changed("db") {
+			dbName = output.ReadLine("New database for this app — its name (optional, Enter for none)")
+		}
+		dbName, dbErr := appCreateDB(dbName, isLaravel)
+		if dbErr != nil {
+			output.Error("%s", dbErr)
+			return dbErr
+		}
+
 		if !custom && repository == "" {
 			output.Error("Repository is required")
 			return fmt.Errorf("repository is required")
@@ -330,6 +341,9 @@ repository.
 		}
 		if engine != "" {
 			body["engine"] = engine
+		}
+		if dbName != "" {
+			body["db"] = dbName
 		}
 		if octane != "" {
 			switch octane {
@@ -859,7 +873,8 @@ func init() {
 	appsCreateCmd.Flags().String("branch", "", "Git branch")
 	appsCreateCmd.Flags().Bool("custom", false, "Create as custom app (non-Laravel)")
 	appsCreateCmd.Flags().String("docroot", "", "Custom document root")
-	appsCreateCmd.Flags().String("engine", "", "Database engine (mariadb|pgsql, Cipi 4.8+)")
+	appsCreateCmd.Flags().String("engine", "", "Database engine (mariadb|pgsql, Cipi 4.8+); with --db, the engine of that database")
+	appsCreateCmd.Flags().String("db", "", "Custom and Node apps: the name of a new database to create with the app and link to it (Cipi 5.18.0+)")
 	appsCreateCmd.Flags().String("octane", "", "Octane mode (true|false|frankenphp, Cipi 5.0+)")
 	appsCreateCmd.Flags().String("node", "", "Node app mode (spa|static|ssr, Cipi 5.4.0+)")
 	appsCreateCmd.Flags().String("framework", "", "Node framework preset (next, nuxt, sveltekit, astro, remix, vite)")

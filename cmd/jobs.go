@@ -96,7 +96,8 @@ var jobsWaitCmd = &cobra.Command{
 		}
 
 		output.Info("Waiting for job %s...", args[0])
-		job, err := client.WaitForJob(args[0])
+		// Asked to wait for a job by its id: for as long as the longest one, a deploy, may run.
+		job, err := client.WaitForJobFor(args[0], api.DeployJobWait)
 		if err != nil {
 			output.Error("Job failed: %s", err)
 			return err

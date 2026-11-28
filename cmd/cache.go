@@ -248,7 +248,7 @@ func cacheFail(action string, err error, ability string) error {
 
 var cacheCmd = &cobra.Command{
 	Use:   "cache",
-	Short: "The nginx page cache of an app: on, off, ttl, clear",
+	Short: "The nginx page cache of an app: on, off, ttl, clear, purge",
 	Long: `The page cache is nginx's: it keeps the page PHP made and answers the next
 visitors with it, without running PHP at all (fastcgi_cache for an app on
 PHP-FPM — Laravel, WordPress, any PHP app; proxy_cache for one on Octane).
@@ -280,6 +280,7 @@ abilities.
   cipi-cli cache ttl blog 1h
   cipi-cli cache exclude blog add '/cart*' '/feed'
   cipi-cli cache clear blog
+  cipi-cli cache purge blog /blog/hello-world/ '/blog/*'
   cipi-cli cache off blog
 
 ` + multiServerTip,
@@ -615,7 +616,7 @@ it is turned on.
 
 var cacheClearCmd = &cobra.Command{
 	Use:     "clear <app>",
-	Aliases: []string{"purge", "flush"},
+	Aliases: []string{"flush"},
 	Short:   "Delete every cached page of the app",
 	Long: `Delete every cached page of the app: the next visit to each page runs PHP
 and keeps it again. Cipi does this by itself after every deploy and rollback.

@@ -117,6 +117,8 @@ cipi-cli deploy --help
 cipi-cli apps list                          List all applications (ENV column: environment label)
 cipi-cli apps show <name>                   Show application details
 cipi-cli apps create [flags]                Create a new application
+                                            --custom / --node: --db NAME creates a database with the app and links it
+                                            (5.18.0+; --engine picks its engine). A Laravel app has its own.
 cipi-cli apps edit <name> [flags]           Edit an application
 cipi-cli apps delete <name> [-y]            Delete an application
 cipi-cli apps suspend <name>                Suspend an application (HTTP 503)
@@ -165,6 +167,10 @@ cipi-cli deploy last                        The last run of every app (5.9.0+)
 cipi-cli deploy rollback <app> [-y]         Rollback to previous release
 cipi-cli deploy unlock <app>                Unlock a stuck deployment, resume a paused commit
 cipi-cli deploy config show|set <app>       Structured deploy.php options (5.0.3+)
+                                            [--keep-releases N] [--build-timeout S] [--step-timeout S] [--migrate] [--node-build CMD] …
+                                            --build-timeout / --step-timeout (5.18.0+): seconds the frontend build may run (60-3600,
+                                            1800 unless set) and every other command of a deploy (60-1800, 300 unless set).
+                                            A Node app takes --keep-releases, --predeploy-snapshot and these two.
 cipi-cli deploy audit <app> [--days N]      Deploy audit ledger (5.4.0+)
 ```
 
@@ -243,7 +249,10 @@ cipi-cli cache exclude <app> add '/cart*' /feed
 cipi-cli cache exclude <app> remove /feed   --all for none of its own
 cipi-cli cache exclude <app> set '/cart*,/feed'
 cipi-cli cache clear <app>                  Delete the cached pages now
+cipi-cli cache purge <app> <page>...        Delete some pages only: /blog/post/, '/blog/*', a URL of the app (5.18.0+)
 ```
+
+`cache purge` leaves the rest of the cache warm. A path is that page on every domain and alias of the app, http and https, with its `?utm_…` variants; a trailing `*` is every page under it (quote it); a URL is that page on that domain only. Up to 500 at once (cipi/api 1.48+). From the app's own code: the WordPress plugin [cipi-sh/cache-wp](https://github.com/cipi-sh/cache-wp) and the PHP package [cipi-sh/cache-php](https://github.com/cipi-sh/cache-php).
 
 The page cache is nginx's: it keeps the page PHP made and answers the next visitors with it, without running PHP at all — `fastcgi_cache` for an app on PHP-FPM (Laravel, WordPress, any PHP app), `proxy_cache` for one on Octane (Cipi 5.17.0+, cipi/api 1.47+, abilities `nginx-view` / `nginx-manage`).
 
@@ -488,12 +497,93 @@ cipi-cli monitor                            System monitor checks (5.3.0+)
 cipi-cli packages                           Optional host packages: the catalog and what is installed
 cipi-cli packages install <id>              Install an entry, e.g. browsershot, libreoffice (5.14.0+)
 cipi-cli packages remove <id> [-y]          Remove an entry, and only what nothing else needs (5.14.0+)
-cipi-cli zt                                 Cloudflare Zero Trust status (5.3.0+)
+cipi-cli zt                                 Zero Trust status: Cloudflare Tunnel (5.3.0+) and the mesh network — Tailscale, NetBird (5.18.0+)
+cipi-cli zt join <tailscale|netbird>        Put the server on a mesh network (5.18.0+)  [--key-file --hostname --tags --control-url --direct --adopt …]
+cipi-cli zt lock <ssh|http> [-y]            Close SSH, or 80/443, to the world: open on the mesh only (5.18.0+)
+cipi-cli zt unlock <ssh|http>               Reopen it (5.18.0+)
+cipi-cli zt ssh <on|off>                    Tailscale SSH (5.18.0+)
+cipi-cli zt leave [-y]                      Take the server off the network: reopens what the locks closed (5.18.0+)
 ```
+
+`zt` reads both sides of Zero Trust. Cloudflare Tunnel publishes the sites; a mesh network — Tailscale or NetBird — is how the people who run the server reach it. The tunnel's lines come first (state as Cloudflare sees it, locks, how many hostnames); then the mesh: connected or not and the client's own word for why, the server's address and name on the network, peers online, the node key's expiry (Tailscale), the command to SSH in over it and the last SSH login the server saw come over the mesh, whether port 22 and 80/443 are closed to the world, the server's warnings, how this client reaches the server (`via mesh`, `tunnel`, `public`…) and, on `refused` lines, what the server would not do from here and why. `--json` has everything the server said, hostnames and Access included.
+
+**The mesh is managed from here too** (Cipi 5.18.0+, cipi/api 1.48+, ability `zt-manage`); Cloudflare's tunnel is changed at the server's shell (`cipi zt`).
+
+```bash
+cipi-cli zt join tailscale --tags cipi          # asks for the auth key; a tagged machine's key never expires
+cipi-cli zt join netbird --key-file ~/nb.key --control-url https://netbird.example.com
+cipi-cli zt                                     # the address on the network: ssh cipi@100.x.y.z once, from a device of it
+cipi-cli zt lock ssh                            # port 22 from the network only
+cipi-cli zt lock http                           # 80/443 too — private sites, or sites published through Cloudflare
+cipi-cli zt unlock http
+cipi-cli zt leave
+```
+
+- **`zt join`** installs the client on the server, signs in and lets the mesh through the firewall; it closes nothing and takes a minute or two. The key is asked for at a prompt, read from `--key-file`, or given with `--key` (which leaves it in the shell's history); the server uses it once and keeps it nowhere. `--adopt` takes a client that is already installed and connected on the server. Options: `--hostname`, `--control-url` (a Headscale, a self-hosted NetBird), `--direct` (also open the client's UDP port), `--accept-dns`, `--accept-routes`, and for Tailscale `--tags`, `--ssh`, `--reauth`.
+- **`zt lock ssh|http`** asks for confirmation (`-y` skips it). **The server refuses what would lock people out, and says why** — there is no `--force` over the API: `ssh` until sshd has accepted a login that came over the mesh, while the node key can expire, with the firewall off, or with Tailscale SSH on; `http` while an app renews its certificate over HTTP-01, and when this client reaches the API on the public address the lock would close. For that last one, point the profile's endpoint at the server's mesh name or address (or at its hostname on the Cloudflare tunnel) and run it again.
+- **`zt leave`** is refused when this client reaches the server over the mesh itself; that is done at the server's shell.
+- **`zt ssh on|off`** is Tailscale SSH: the tailnet's policy says who signs in. Tailscale only.
+
+`zt-manage` is as strong as `ssh-manage` — whoever holds it can put the server on a network of their own. A token made with a list of abilities does not have it until it is created again with `zt-manage` in the list; a `--full-access` token has it.
 
 `node install|upgrade|default|remove` are async jobs and take even (LTS) majors only — the CLI rejects anything else before calling the server. `node upgrade --restart` moves the SSR apps on the upgraded runtime to the new binary blue/green; without it they take it at their next deploy. Requires Cipi 5.9.0+, API 1.39+ and the `node-runtimes-manage` ability — existing tokens do not get it.
 
 `packages install|remove` are async jobs on the server's **closed catalog** (Cipi 5.14.0): `image-optimizers`, `avif`, `ffmpeg`, `imagemagick`, `poppler-utils`, `browsershot` (the libraries and fonts the Chrome Puppeteer downloads needs — Chrome itself comes with `npm install puppeteer` in the app), `fonts-cjk`, `pdftk`, `libreoffice` (headless), `pandoc`, `tesseract`, and the security scanners [Hackly](https://github.com/andreapollastri/hackly) runs: `sec-recon` (nmap, dig, whois) and `sec-gitleaks` from Ubuntu; `sec-nuclei`, `sec-zap`, `sec-nikto`, `sec-wpscan`, `sec-trivy`, `sec-semgrep`, `sec-checkov` as upstream releases Cipi pins by version and SHA-256. The list shows what each entry brings (`ffmpeg, ffprobe`, or *libraries*), its VERSION (`ubuntu`, or the pinned one — `2.16.1 → 2.17.0` when an older one is installed) and, for a partial install, what is missing — `install` completes a partial entry and updates an outdated one. `remove` asks for confirmation unless `-y`; a library entry keeps whatever other software still uses. Requires Cipi 5.14.0+, API 1.44+ and the `packages-manage` ability.
+
+### Backups to SFTP
+
+```
+cipi-cli backup destination add <name> --host <h> --user <u> [--port 22] [--path <dir>]   An SFTP destination (5.18.0+)
+cipi-cli backup destination edit <name> [--host] [--port] [--user] [--path] [--new-key]
+cipi-cli backup destination key <name>           The public key the remote must accept
+cipi-cli backup destination test [name]          Write and remove a file there
+cipi-cli backup destination remove <name> [-y]   One no profile uses (its archives stay)
+```
+
+A server reached over SSH is a backup destination next to `local` and the S3 ones: a VPS with a user of its own for backups, a **Hetzner Storage Box** (`--port 23`), a NAS. Cipi makes a key for it on the server and prints its public half with how to install it — `ssh-copy-id -p 23 -s …` for a Storage Box, the `authorized_keys` line elsewhere. No password is asked for or sent; only SFTP is asked of the remote. A profile names it like any other: `--dest local,box`. S3 buckets are added on the server (`cipi backup destination add`): they take a secret key.
+
+### How the server updates Cipi
+
+```
+cipi-cli updates                                        What is set, trusted, waiting (5.18.0+)
+cipi-cli updates --delay 12h                            Wait before installing a new release (hours, days; off)
+cipi-cli updates --verify on --fingerprint SHA256:…     Only releases signed by a trusted key
+cipi-cli updates --verify off --delay off
+```
+
+Both safeguards are off by default: every night the server installs the latest Cipi, as before. `--verify on` installs a release only when its tag `v<version>` is signed by a key the server trusts and points at what was downloaded; the first trust takes the fingerprint of a shipped key, compared with the one published at [cipi.sh](https://cipi.sh/docs/self-update#signers). `--delay` installs a new release once the server has seen it for that long. Starting an update is not done from cipi-cli. Abilities `updates-view`, `updates-manage`.
+
+### Transfers between servers
+
+```
+cipi-cli sync push [app...] --to <profile>      Send apps to another server of yours and import them there (5.18.0+)
+cipi-cli sync push [app...] --host <address>    …to a server that is not a profile (it must trust this server's key)
+                                                [--port 22 --with-db --with-storage --keep-trust -y]
+cipi-cli sync check <host> [--port 22]          Can this server send to that one: key accepted, Cipi answers
+cipi-cli sync key [--raw]                       This server's sync key
+cipi-cli sync trust [key]                       Let another server send apps here  [--from <profile> | --key-file <file>]
+cipi-cli sync untrust [key]                     Take that key back out             [--from <profile> | --key-file <file>]
+```
+
+`sync` copies apps from one Cipi server to another — a move to a bigger machine, production copied onto staging, a second server kept ready. **The server of the profile in use is the source**: it exports the apps (settings, `.env`, deploy recipe, workers, crons — and databases and uploaded files when asked), encrypts the archive, sends it over SSH and has the target import it. Apps that are not on the target are created there; apps that are, updated. Nothing is removed or stopped on the source, and DNS is yours to move.
+
+```bash
+cipi-cli prod sync push --to staging --with-db            # every app of prod, onto the server of the staging profile
+cipi-cli prod sync push shop blog --to staging --with-db --with-storage
+cipi-cli prod sync push --to new --host 10.0.0.12         # same, over a private address
+cipi-cli prod sync push shop --host 203.0.113.9           # a server that is not a profile
+```
+
+- **`--to <profile>` does the preparation**: this server's key is added on the target, the way is checked, the transfer runs, and the key is taken out again when it ends — whatever its end. `--keep-trust` leaves it, for transfers that repeat; a key that was trusted before is left where it was. The address is the host of that profile's endpoint unless `--host` names another (a private or mesh address, or the real one of a server whose API sits behind a proxy).
+- **`--host` alone** is for a server this client has no profile for. It has to trust the source first: `cipi-cli sync key` here, `cipi sync trust` there.
+- **Nothing starts before a check**: the source is asked whether the target accepts its key and runs a Cipi that can take the transfer, and the answer is said in words — not trusted yet, no SSH answer at that address, a host key that changed, SSH but no Cipi, a Cipi too old. `sync check` asks the same without sending anything.
+- **Encryption is the server's**: the archive is encrypted (AES-256) with a passphrase the source makes for that one transfer and hands to the target over the same SSH connection. There is no flag for it: it is never shown and never passes through this client or the API. The archive is removed from both servers when the import ends.
+- **`--with-db`** dumps the databases on the source and restores them on the target, **replacing the database of an app that is already there**. **`--with-storage`** adds each app's `shared/storage`, which can be large. Without either, an app arrives with its settings and an empty database.
+- **Laravel and custom apps travel; Node apps are skipped** — `cipi sync` does not recreate them yet. Create them on the target (`apps create --node …`): the code comes from Git with the first deploy.
+- The transfer is an async job, followed for up to two hours; its output is printed when it ends. `-y` skips the confirmation.
+- **`sync trust` gives the holder of that key a shell as `cipi` on the server**: only the key of a server of yours. `--from <profile>` reads the key from that server, so nothing is copied by hand: `cipi-cli staging sync trust --from prod`.
+
+Requires Cipi 5.18.0+ on both servers, cipi/api 1.48+ and the `sync-manage` ability — on the source, and on the target for `--to`, `trust` and `untrust`. `sync-manage` is as strong as `ssh-manage`: whoever holds it can have the server send its apps, databases included, to a host of their choosing. Exports to a file (`cipi sync export|import|list`) stay at the server's shell.
 
 ### IP whitelist
 
@@ -565,6 +655,8 @@ cipi-cli <command> --help                   Command help
 
 Write operations (create, edit, delete, deploy, SSL, etc.) are asynchronous on the Cipi API. The CLI automatically polls for job completion and displays a spinner while waiting. If you prefer to handle polling manually, use `cipi-cli jobs show <id>` or `cipi-cli jobs wait <id>`.
 
+**How long it waits:** as long as the server lets the job run, and a minute more — two hours for `deploy` (the frontend build of a release alone has 30 minutes, and up to an hour where the app asks for it), ten minutes for every other command. A job the API stops there ends as failed and the CLI says why. If the wait itself is over first, the command says that the job is still running and how to pick it up again: `cipi-cli jobs wait <id>`, which waits for as long as a deploy may take. (Before, the CLI stopped after 120 polls — under nine minutes — and a deploy with a long build "timed out after polling" while it was still going.)
+
 ## Releases
 
 Releases are automated via GitHub Actions. To publish a new version:
@@ -632,6 +724,11 @@ A token only has the abilities it was created with: a feature added later (backu
 | `.env` order (`apps env order`, `apps env set --order`), paused commit in `deploy status`, `backup profile --exclude-paths`, MySQL in `db engines`, basic auth agent in `apps basicauth status` | 5.13.0 | 1.43+ |
 | Optional packages install / remove (`packages install`, `packages remove`), PROVIDES, VERSION and missing in `packages` | 5.14.0 | 1.44+ (`packages-manage`) |
 | Page cache (`cache`), Octane PHP (`octane show|php|restart`), Valkey per app (`valkey`), notification time zone and server name (`notifications settings|timezone|server-name`) | 5.17.0 | 1.47+ (no new ability: `nginx-*`, `php-*`, `services-*`, `notifications-*`) |
+| The mesh network in `zt` (Tailscale, NetBird: address, peers, node key, locks, warnings) | 5.18.0 | 1.48+ (`zt-view`, no new ability) |
+| Managing the mesh (`zt join`, `zt leave`, `zt lock`, `zt unlock`, `zt ssh`) | 5.18.0 | 1.48+ (`zt-manage`) |
+| Transfers between servers (`sync push`, `sync check`, `sync key`, `sync trust`, `sync untrust`) | 5.18.0 | 1.48+ (`sync-manage`) |
+| SFTP backup destinations (`backup destination add|edit|key|remove`) | 5.18.0 | 1.48+ (`backups-manage`) |
+| Update policy (`updates`) | 5.18.0 | 1.48+ (`updates-view`, `updates-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
