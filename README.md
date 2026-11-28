@@ -249,7 +249,10 @@ cipi-cli cache exclude <app> add '/cart*' /feed
 cipi-cli cache exclude <app> remove /feed   --all for none of its own
 cipi-cli cache exclude <app> set '/cart*,/feed'
 cipi-cli cache clear <app>                  Delete the cached pages now
+cipi-cli cache purge <app> <page>...        Delete some pages only: /blog/post/, '/blog/*', a URL of the app (5.18.0+)
 ```
+
+`cache purge` leaves the rest of the cache warm. A path is that page on every domain and alias of the app, http and https, with its `?utm_…` variants; a trailing `*` is every page under it (quote it); a URL is that page on that domain only. Up to 500 at once (cipi/api 1.48+). From the app's own code: the WordPress plugin [cipi-sh/cache-wp](https://github.com/cipi-sh/cache-wp) and the PHP package [cipi-sh/cache-php](https://github.com/cipi-sh/cache-php).
 
 The page cache is nginx's: it keeps the page PHP made and answers the next visitors with it, without running PHP at all — `fastcgi_cache` for an app on PHP-FPM (Laravel, WordPress, any PHP app), `proxy_cache` for one on Octane (Cipi 5.17.0+, cipi/api 1.47+, abilities `nginx-view` / `nginx-manage`).
 
