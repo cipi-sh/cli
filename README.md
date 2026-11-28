@@ -530,6 +530,29 @@ cipi-cli zt leave
 
 `packages install|remove` are async jobs on the server's **closed catalog** (Cipi 5.14.0): `image-optimizers`, `avif`, `ffmpeg`, `imagemagick`, `poppler-utils`, `browsershot` (the libraries and fonts the Chrome Puppeteer downloads needs — Chrome itself comes with `npm install puppeteer` in the app), `fonts-cjk`, `pdftk`, `libreoffice` (headless), `pandoc`, `tesseract`, and the security scanners [Hackly](https://github.com/andreapollastri/hackly) runs: `sec-recon` (nmap, dig, whois) and `sec-gitleaks` from Ubuntu; `sec-nuclei`, `sec-zap`, `sec-nikto`, `sec-wpscan`, `sec-trivy`, `sec-semgrep`, `sec-checkov` as upstream releases Cipi pins by version and SHA-256. The list shows what each entry brings (`ffmpeg, ffprobe`, or *libraries*), its VERSION (`ubuntu`, or the pinned one — `2.16.1 → 2.17.0` when an older one is installed) and, for a partial install, what is missing — `install` completes a partial entry and updates an outdated one. `remove` asks for confirmation unless `-y`; a library entry keeps whatever other software still uses. Requires Cipi 5.14.0+, API 1.44+ and the `packages-manage` ability.
 
+### Backups to SFTP
+
+```
+cipi-cli backup destination add <name> --host <h> --user <u> [--port 22] [--path <dir>]   An SFTP destination (5.18.0+)
+cipi-cli backup destination edit <name> [--host] [--port] [--user] [--path] [--new-key]
+cipi-cli backup destination key <name>           The public key the remote must accept
+cipi-cli backup destination test [name]          Write and remove a file there
+cipi-cli backup destination remove <name> [-y]   One no profile uses (its archives stay)
+```
+
+A server reached over SSH is a backup destination next to `local` and the S3 ones: a VPS with a user of its own for backups, a **Hetzner Storage Box** (`--port 23`), a NAS. Cipi makes a key for it on the server and prints its public half with how to install it — `ssh-copy-id -p 23 -s …` for a Storage Box, the `authorized_keys` line elsewhere. No password is asked for or sent; only SFTP is asked of the remote. A profile names it like any other: `--dest local,box`. S3 buckets are added on the server (`cipi backup destination add`): they take a secret key.
+
+### How the server updates Cipi
+
+```
+cipi-cli updates                                        What is set, trusted, waiting (5.18.0+)
+cipi-cli updates --delay 12h                            Wait before installing a new release (hours, days; off)
+cipi-cli updates --verify on --fingerprint SHA256:…     Only releases signed by a trusted key
+cipi-cli updates --verify off --delay off
+```
+
+Both safeguards are off by default: every night the server installs the latest Cipi, as before. `--verify on` installs a release only when its tag `v<version>` is signed by a key the server trusts and points at what was downloaded; the first trust takes the fingerprint of a shipped key, compared with the one published at [cipi.sh](https://cipi.sh/docs/self-update#signers). `--delay` installs a new release once the server has seen it for that long. Starting an update is not done from cipi-cli. Abilities `updates-view`, `updates-manage`.
+
 ### Transfers between servers
 
 ```
@@ -704,6 +727,8 @@ A token only has the abilities it was created with: a feature added later (backu
 | The mesh network in `zt` (Tailscale, NetBird: address, peers, node key, locks, warnings) | 5.18.0 | 1.48+ (`zt-view`, no new ability) |
 | Managing the mesh (`zt join`, `zt leave`, `zt lock`, `zt unlock`, `zt ssh`) | 5.18.0 | 1.48+ (`zt-manage`) |
 | Transfers between servers (`sync push`, `sync check`, `sync key`, `sync trust`, `sync untrust`) | 5.18.0 | 1.48+ (`sync-manage`) |
+| SFTP backup destinations (`backup destination add|edit|key|remove`) | 5.18.0 | 1.48+ (`backups-manage`) |
+| Update policy (`updates`) | 5.18.0 | 1.48+ (`updates-view`, `updates-manage`) |
 
 New app PHP versions must be **8.3**, **8.4**, **8.5** (Cipi 4.5.4+), or **8.6** (Cipi 5.9.1+ / API 1.39.2+).
 
